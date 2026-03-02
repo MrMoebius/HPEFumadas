@@ -16,7 +16,7 @@ import paho.mqtt.client as mqtt
 from loguru import logger
 from config.settings import (
     MQTT_HOST, MQTT_PORT, VEHICLE_ID, TICK_INTERVAL,
-    TOPIC_TELEMETRY, TOPIC_STATUS,
+    TOPIC_TELEMETRY, TOPIC_STATUS, TOPIC_ROUTE, TOPIC_COMMANDS,
 )
 from simulator.mission_simulator import MissionSimulator
 
@@ -59,28 +59,85 @@ class VehicleSimulator:
         self.sirens_active = False
         self.lights_active = False
 
+        # Campos de ruta geo
+        self.route_progress = 0.0
+        self.eta_seconds = 0.0
+        self.distance_remaining_m = 0.0
+        self.on_route = False
+
+        # Flag para forzar emergencia desde comando externo
+        self._force_emergency = False
+
         # MQTT
         self.client = mqtt.Client(client_id=f"sim-{self.vehicle_id}")
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
+        self.client.on_message = self._on_message
 
-        # Ruta actual (lista de waypoints)
+        # Ruta actual (lista de waypoints — fallback)
         self._route = []
         self._route_index = 0
 
-        # Cargar rutas
+        # Cargar rutas fallback
         data_dir = os.path.join(os.path.dirname(__file__), "data")
         with open(os.path.join(data_dir, "routes.json"), "r") as f:
             self._routes_data = json.load(f)
 
+        # GeoEngine + RouteSimulator (si disponible)
+        self._geo_engine = None
+        self._route_sim = None
+        self._traffic = None
+        self._current_destination = None
+        self._current_route_name = None
+        self._init_geo()
+
+    def _init_geo(self):
+        """Intenta inicializar GeoEngine y tráfico simulado."""
+        try:
+            from geo.engine import GeoEngine
+            from geo.traffic import SimulatedTrafficProvider
+            self._geo_engine = GeoEngine()
+            self._traffic = SimulatedTrafficProvider()
+            if self._geo_engine.available:
+                logger.info("GeoEngine disponible — rutas reales por calles de Valencia")
+            else:
+                logger.warning("GeoEngine cargó pero no disponible — fallback a waypoints")
+                self._geo_engine = None
+        except Exception as e:
+            logger.warning(f"GeoEngine no disponible ({e}) — fallback a waypoints")
+            self._geo_engine = None
+
+    @property
+    def _use_geo(self) -> bool:
+        return self._geo_engine is not None and self._geo_engine.available
+
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             logger.info(f"Conectado a MQTT broker ({MQTT_HOST}:{MQTT_PORT})")
+            client.subscribe(TOPIC_COMMANDS, qos=1)
+            logger.info(f"Suscrito a comandos: {TOPIC_COMMANDS}")
         else:
             logger.error(f"Error de conexión MQTT: rc={rc}")
 
     def _on_disconnect(self, client, userdata, rc):
         logger.warning(f"Desconectado de MQTT (rc={rc})")
+
+    def _on_message(self, client, userdata, msg):
+        """Procesa comandos externos recibidos por MQTT."""
+        try:
+            payload = json.loads(msg.payload.decode())
+            cmd = payload.get("command", "")
+            if cmd == "force_emergency":
+                if self.mission_status == "disponible":
+                    self._force_emergency = True
+                    logger.info("Comando recibido: FORZAR EMERGENCIA")
+                else:
+                    logger.warning(
+                        f"Comando force_emergency ignorado — "
+                        f"vehículo en estado '{self.mission_status}'"
+                    )
+        except Exception as e:
+            logger.error(f"Error procesando comando: {e}")
 
     def connect(self):
         logger.info(f"Conectando a {MQTT_HOST}:{MQTT_PORT}...")
@@ -133,12 +190,39 @@ class VehicleSimulator:
             self.mileage_km += (self.speed_kmh / 3600) * TICK_INTERVAL
 
     def _simulate_movement(self):
-        """Simula movimiento GPS siguiendo una ruta."""
+        """Simula movimiento GPS — con GeoEngine o fallback waypoints."""
         if self.mission_status == "disponible":
             self.speed_kmh = 0.0
+            self.on_route = False
+            self.route_progress = 0.0
+            self.eta_seconds = 0.0
+            self.distance_remaining_m = 0.0
             return
 
         if self.mission_status in ("en_ruta", "regreso_base"):
+            # --- GeoEngine path ---
+            if self._use_geo and self._route_sim is not None:
+                if self.mission_status == "en_ruta":
+                    self.speed_kmh = random.uniform(50, 80)
+                else:
+                    self.speed_kmh = random.uniform(30, 50)
+
+                congestion = self._traffic.congestion_factor() if self._traffic else 1.0
+                pos = self._route_sim.tick(TICK_INTERVAL, self.speed_kmh, congestion)
+                self.latitude = pos[0]
+                self.longitude = pos[1]
+                self.heading = self._route_sim.heading()
+                self.on_route = True
+                self.route_progress = self._route_sim.progress
+                self.eta_seconds = self._route_sim.eta_seconds(congestion)
+                self.distance_remaining_m = self._route_sim.distance_remaining_m
+
+                # Comprobar si terminó la ruta
+                if self._route_sim.finished:
+                    self._route_index = len(self._route)  # señal para MissionSimulator
+                return
+
+            # --- Fallback: waypoints ---
             if self._route and self._route_index < len(self._route):
                 target = self._route[self._route_index]
                 dlat = target["lat"] - self.latitude
@@ -215,13 +299,22 @@ class VehicleSimulator:
     def _simulate_mission(self):
         """Delega la lógica de misión al MissionSimulator."""
         prev_status = self.mission_status
-        self.mission_status = self.mission.update(
-            self.mission_status,
-            self._route_index,
-            len(self._route),
-            self.water_tank_level,
-            self.tick,
-        )
+
+        # Forzar emergencia si se recibió comando externo
+        if self._force_emergency and self.mission_status == "disponible":
+            self._force_emergency = False
+            self.mission_status = "en_ruta"
+            self.mission.scene_ticks = 0
+            self.mission.scene_duration = random.randint(25, 60)
+            logger.info("EMERGENCIA FORZADA por comando externo")
+        else:
+            self.mission_status = self.mission.update(
+                self.mission_status,
+                self._route_index,
+                len(self._route),
+                self.water_tank_level,
+                self.tick,
+            )
 
         if self.mission_status != prev_status:
             logger.info(f"Misión: {prev_status} → {self.mission_status}")
@@ -229,20 +322,123 @@ class VehicleSimulator:
             if self.mission_status == "en_ruta":
                 # Seleccionar ruta aleatoria
                 route_name = random.choice(list(self._routes_data.keys()))
-                self._route = self._routes_data[route_name]["waypoints"]
+                route_data = self._routes_data[route_name]
+                self._current_route_name = route_name
+                destination_name = route_data.get("destination", route_name)
+
+                # Intentar ruta real con GeoEngine
+                if self._use_geo:
+                    wps = route_data["waypoints"]
+                    dest = (wps[-1]["lat"], wps[-1]["lon"])
+                    origin = (self.latitude, self.longitude)
+                    self._current_destination = dest
+
+                    # Calcular ruta óptima (evita tráfico) y directa (distancia)
+                    from geo.traffic import get_zones_with_congestion
+                    traffic_zones = get_zones_with_congestion()
+                    coords = self._geo_engine.fastest_route(
+                        origin, dest, traffic_zones,
+                    )
+                    direct_coords = self._geo_engine.shortest_route(origin, dest)
+
+                    # Si fastest_route falla, usar shortest_route
+                    if not coords or len(coords) < 2:
+                        coords = direct_coords
+                        direct_coords = []
+
+                    if coords and len(coords) >= 2:
+                        from geo.route_simulator import RouteSimulator
+                        self._route_sim = RouteSimulator(coords)
+                        self._route = [{"lat": c[0], "lon": c[1]} for c in coords]
+                        self._route_index = 0
+                        self.on_route = True
+
+                        congestion = self._traffic.congestion_factor() if self._traffic else 1.0
+                        total_dist = self._route_sim.total_distance_m
+                        eta = self._route_sim.eta_seconds(congestion)
+                        direct_dist = (
+                            self._geo_engine.route_distance_m(direct_coords)
+                            if direct_coords else total_dist
+                        )
+
+                        # Publicar ambas rutas por MQTT
+                        self.client.publish(TOPIC_ROUTE, json.dumps({
+                            "type": "route_started",
+                            "coords": [[c[0], c[1]] for c in coords],
+                            "direct_coords": (
+                                [[c[0], c[1]] for c in direct_coords]
+                                if direct_coords else []
+                            ),
+                            "destination": destination_name,
+                            "total_distance_m": round(total_dist, 1),
+                            "direct_distance_m": round(direct_dist, 1),
+                            "eta_seconds": round(eta, 1),
+                            "congestion_factor": congestion,
+                        }), qos=1)
+
+                        self.sirens_active = True
+                        self.lights_active = True
+                        logger.info(
+                            f"Despachado a: {destination_name} "
+                            f"(optima: {len(coords)} nodos {total_dist:.0f}m, "
+                            f"directa: {direct_dist:.0f}m, ETA {eta:.0f}s)"
+                        )
+                        return
+                    else:
+                        logger.warning(
+                            f"GeoEngine no pudo calcular ruta a {destination_name} "
+                            "— fallback waypoints"
+                        )
+
+                # Fallback: waypoints originales
+                self._route_sim = None
+                self._route = route_data["waypoints"]
                 self._route_index = 0
+                self.on_route = True
                 self.sirens_active = True
                 self.lights_active = True
-                logger.info(f"Despachado a: {route_name}")
+
+                # Publicar ruta waypoints por MQTT para que el dashboard la muestre
+                fallback_coords = [[w["lat"], w["lon"]] for w in self._route]
+                self.client.publish(TOPIC_ROUTE, json.dumps({
+                    "type": "route_started",
+                    "coords": fallback_coords,
+                    "destination": destination_name,
+                    "total_distance_m": 0,
+                    "eta_seconds": 0,
+                    "congestion_factor": 1.0,
+                }), qos=1)
+                logger.info(f"Despachado a: {route_name} (waypoints)")
 
             elif self.mission_status == "en_escena":
                 self.sirens_active = False
+                self.on_route = False
+                self._route_sim = None
 
             elif self.mission_status == "regreso_base":
-                # Ruta inversa a la base
-                base = self._routes_data[list(self._routes_data.keys())[0]]["waypoints"][0]
-                self._route = [base]
+                base_pos = (39.4699, -0.3763)
+
+                if self._use_geo:
+                    origin = (self.latitude, self.longitude)
+                    coords = self._geo_engine.shortest_route(origin, base_pos)
+                    if coords and len(coords) >= 2:
+                        from geo.route_simulator import RouteSimulator
+                        self._route_sim = RouteSimulator(coords)
+                        self._route = [{"lat": c[0], "lon": c[1]} for c in coords]
+                        self._route_index = 0
+                        self.on_route = True
+                        self.sirens_active = False
+                        self.lights_active = True
+                        logger.info(
+                            f"Regresando a base (ruta OSM: {len(coords)} nodos)"
+                        )
+                        return
+
+                # Fallback
+                self._route_sim = None
+                self._route = [{"lat": base_pos[0], "lon": base_pos[1]}]
                 self._route_index = 0
+                self.on_route = True
                 self.sirens_active = False
                 self.lights_active = True
 
@@ -251,6 +447,17 @@ class VehicleSimulator:
                 self.lights_active = False
                 self._route = []
                 self._route_index = 0
+                self._route_sim = None
+                self.on_route = False
+                self.route_progress = 0.0
+                self.eta_seconds = 0.0
+                self.distance_remaining_m = 0.0
+
+                # Publicar ruta completada
+                self.client.publish(TOPIC_ROUTE, json.dumps({
+                    "type": "route_completed",
+                    "total_time_actual_s": 0,
+                }), qos=1)
 
     def get_state(self) -> dict:
         """Retorna el estado completo del vehículo como dict."""
@@ -280,6 +487,10 @@ class VehicleSimulator:
             "mission_status": self.mission_status,
             "sirens_active": self.sirens_active,
             "lights_active": self.lights_active,
+            "route_progress": round(self.route_progress, 3),
+            "eta_seconds": round(self.eta_seconds, 1),
+            "distance_remaining_m": round(self.distance_remaining_m, 1),
+            "on_route": self.on_route,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "tick": self.tick,
         }

@@ -43,6 +43,12 @@ class VehicleState(BaseModel):
     sirens_active: bool = False
     lights_active: bool = False
 
+    # Ruta / Cartografía
+    route_progress: float = 0.0
+    eta_seconds: float = 0.0
+    distance_remaining_m: float = 0.0
+    on_route: bool = False
+
     # Metadatos
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     anomalies: list[str] = Field(default_factory=list)

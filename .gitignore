@@ -24,6 +24,9 @@ data/influxdb/*
 # Bitácora (solo local)
 BITACORA.md
 
+# Geo cache (OSM graph)
+geo/cache/*.graphml
+
 # OS
 .DS_Store
 Thumbs.db

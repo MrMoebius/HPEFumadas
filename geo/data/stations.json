@@ -1,0 +1,42 @@
+[
+  {
+    "id": "EST001",
+    "name": "Parque Central de Bomberos",
+    "lat": 39.4699,
+    "lon": -0.3763,
+    "address": "Plaza del Ayuntamiento, Valencia",
+    "type": "central"
+  },
+  {
+    "id": "EST002",
+    "name": "Parque de Bomberos Campanar",
+    "lat": 39.4835,
+    "lon": -0.3960,
+    "address": "Av. de las Cortes Valencianas, Valencia",
+    "type": "distrito"
+  },
+  {
+    "id": "EST003",
+    "name": "Parque de Bomberos Jesús",
+    "lat": 39.4530,
+    "lon": -0.3790,
+    "address": "Calle San José de Calasanz, Valencia",
+    "type": "distrito"
+  },
+  {
+    "id": "EST004",
+    "name": "Parque de Bomberos Marítimo",
+    "lat": 39.4570,
+    "lon": -0.3380,
+    "address": "Av. del Puerto, Valencia",
+    "type": "distrito"
+  },
+  {
+    "id": "EST005",
+    "name": "Parque de Bomberos Benimaclet",
+    "lat": 39.4920,
+    "lon": -0.3580,
+    "address": "Calle Emilio Baró, Valencia",
+    "type": "distrito"
+  }
+]

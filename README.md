@@ -1,777 +1,519 @@
-# 🚒 Gemelo Digital — Camión de Bomberos
+# Gemelo Digital — Camion de Bomberos BOM-001
 
-**Proyecto:** Horizonte Cero — Realidad Simulada (Fase II: Conflicto)
+**Proyecto:** Horizonte Cero — Realidad Simulada
 **Alianza HPE GreenLake — CDS Tech Challenge**
 
 ---
 
-## 📖 Descripción
+## Descripcion
 
-Prototipo funcional (POC) de un **Gemelo Digital de un camión de bomberos**, capaz de simular su comportamiento en tiempo real, detectar anomalías, predecir fallos mecánicos y asistir en la toma de decisiones operativas ante situaciones críticas como incendios, rescates y operaciones contra incendios.
+Prototipo funcional (POC) de un **Gemelo Digital de un camion de bomberos**, desplegado en edge computing (Raspberry Pi 5), capaz de:
 
-El gemelo digital recibe telemetría simulada del vehículo (motor, ubicación, equipamiento contra incendios, estado de la misión) y proporciona:
-
-- Monitoreo en tiempo real del estado del vehículo
-- Detección automática de anomalías
-- Predicción de fallos mecánicos
-- Simulación de escenarios "¿Qué pasaría si...?"
-- Insights accionables para el centro de mando
+- **Simular** comportamiento vehicular completo en tiempo real (motor, GPS, equipamiento contra incendios)
+- **Detectar anomalias** automaticamente con Isolation Forest (sin entrenamiento supervisado)
+- **Predecir fallos mecanicos** con modelos ARIMA de series temporales
+- **Calcular rutas optimas** por calles reales de Valencia usando grafos OSM, evitando trafico
+- **Visualizar** todo en un dashboard interactivo con mapa en tiempo real
+- **Coordinar** con otros vehiculos de emergencia en un ecosistema de gemelos digitales
 
 ---
 
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                RASPBERRY PI 5 (8GB) + SSD USB 3.0               │
-│                    Docker Compose (ARM64)                        │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                  CAPA DE SIMULACIÓN                        │  │
-│  │                  [contenedor: simulator]                   │  │
-│  │                                                           │  │
-│  │  simulator/                                               │  │
-│  │  ├── vehicle_simulator.py  → Genera telemetría            │  │
-│  │  ├── mission_simulator.py  → Simula misiones              │  │
-│  │  └── scenario_engine.py    → Motor "what-if"              │  │
-│  │                                                           │  │
-│  │  Publica datos vía MQTT → topics: bomberos/telemetria/#  │  │
-│  └──────────────────────────────┬────────────────────────────┘  │
-│                                 │ MQTT                          │
-│                                 ▼                               │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              [contenedor: mosquitto]                      │   │
-│  │              Eclipse Mosquitto (broker MQTT)              │   │
-│  └──────────────────────────────┬───────────────────────────┘   │
-│                                 │                               │
-│                                 ▼                               │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                  CAPA DE PROCESAMIENTO                     │  │
-│  │                  [contenedor: twin-engine]                 │  │
-│  │                                                           │  │
-│  │  core/                                                    │  │
-│  │  ├── twin_engine.py        → Motor principal del gemelo   │  │
-│  │  ├── state_manager.py      → Gestión del estado           │  │
-│  │  ├── event_processor.py    → Procesamiento de eventos     │  │
-│  │  └── rule_engine.py        → Motor de reglas y alertas    │  │
-│  │                                                           │  │
-│  │  ai/                                                      │  │
-│  │  ├── anomaly_detector.py   → Detección de anomalías       │  │
-│  │  ├── failure_predictor.py  → Predicción de fallos         │  │
-│  │  └── decision_assistant.py → Asistente de decisiones      │  │
-│  └──────────────────────────────┬────────────────────────────┘  │
-│                                 │                               │
-│            ┌────────────────────┼──────────────────┐            │
-│            ▼                                       ▼            │
-│  ┌──────────────────────┐            ┌──────────────────────┐   │
-│  │ [contenedor: api]    │            │ [contenedor: db]     │   │
-│  │ FastAPI (REST + WS)  │            │ SQLite + InfluxDB    │   │
-│  │ Puerto: 8000         │            │ Volumen persistente  │   │
-│  └──────────────────────┘            └──────────────────────┘   │
-│            │                                                    │
-│            ▼                                                    │
-│  ┌──────────────────────┐                                       │
-│  │ [contenedor:         │                                       │
-│  │  dashboard]          │                                       │
-│  │ Streamlit            │                                       │
-│  │ Puerto: 8501         │                                       │
-│  └──────────────────────┘                                       │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-        Red interna Docker: bomberos-net (bridge)
++-----------------------------------------------------------------------+
+|           RASPBERRY PI 5 (8GB) + SSD USB 3.0                          |
+|           Docker Compose (6 servicios, ARM64)                         |
+|                                                                       |
+|   +-------------------+        +------------------+                   |
+|   |    simulator       |  MQTT  |   twin-engine    |                   |
+|   |                   |------->|                  |                   |
+|   | vehicle_simulator |        | state_manager    |                   |
+|   | mission_simulator |        | rule_engine      |                   |
+|   | GeoEngine (OSM)   |        | anomaly_detector |                   |
+|   | RouteSimulator    |        | failure_predictor|                   |
+|   | TrafficProvider   |        | decision_assist  |                   |
+|   +-------------------+        +--------+---------+                   |
+|          |                              |                             |
+|          | MQTT                         | SQLite + InfluxDB           |
+|          v                              v                             |
+|   +------------------+         +------------------+                   |
+|   |   mosquitto      |         |      api         |                   |
+|   |   (MQTT broker)  |         |   FastAPI REST   |                   |
+|   |   puerto 1883    |         |   WebSocket      |                   |
+|   +------------------+         |   puerto 8002    |                   |
+|                                +--------+---------+                   |
+|                                         |                             |
+|                                         v                             |
+|                                +------------------+                   |
+|                                |    dashboard     |                   |
+|                                |    Streamlit     |                   |
+|                                |    puerto 8501   |                   |
+|                                +------------------+                   |
+|                                                                       |
+|   Red interna Docker: bomberos-net (bridge)                           |
++-----------------------------------------------------------------------+
 ```
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnologico
 
-| Capa            | Tecnología                      | Justificación                                    |
-|-----------------|---------------------------------|--------------------------------------------------|
-| Lenguaje        | Python 3.11+                    | Ecosistema ML maduro, prototipado rápido         |
-| Simulación      | Generadores custom              | Control total sobre la telemetría                |
-| Mensajería      | MQTT (Mosquitto)                | Protocolo estándar IoT, ligero y pub/sub         |
-| Backend/API     | FastAPI                         | Async, alto rendimiento, documentación auto      |
-| Base de datos   | SQLite + InfluxDB (opcional)    | SQLite para POC, InfluxDB para series temporales |
-| IA — Anomalías  | scikit-learn (Isolation Forest) | Sin entrenamiento supervisado necesario          |
-| IA — Predicción | Prophet / statsmodels           | Predicción de series temporales robusta          |
-| Dashboard       | Streamlit                       | Dashboards interactivos rápidos en Python        |
-| Tiempo real     | WebSockets                      | Streaming de estado a clientes                   |
-| Contenedores    | Docker + docker-compose         | Despliegue reproducible                          |
-| Infraestructura | Raspberry Pi 5 (8GB) + SSD      | Edge computing, bajo coste, ARM64 nativo         |
-
----
-
-## 📁 Estructura del Proyecto
-
-```
-bomberos-digital-twin/
-│
-├── docker-compose.yml              # Orquestación de todos los servicios
-├── .env.example                    # Variables de entorno
-├── README.md                       # Este archivo
-│
-├── mosquitto/
-│   └── mosquitto.conf              # Configuración del broker MQTT
-│
-├── simulator/
-│   ├── Dockerfile                  # Imagen del simulador (ARM64)
-│   ├── requirements.txt            # Dependencias del simulador
-│   ├── __init__.py
-│   ├── vehicle_simulator.py        # Generador de telemetría
-│   ├── mission_simulator.py        # Simulador de misiones
-│   ├── scenario_engine.py          # Motor "what-if"
-│   └── data/
-│       ├── routes.json             # Rutas predefinidas
-│       └── failure_profiles.json   # Perfiles de fallo
-│
-├── core/
-│   ├── Dockerfile                  # Imagen del twin-engine (ARM64)
-│   ├── requirements.txt            # Dependencias del motor
-│   ├── __init__.py
-│   ├── twin_engine.py              # Motor del gemelo digital
-│   ├── state_manager.py            # Estado del vehículo
-│   ├── event_processor.py          # Procesador de eventos
-│   ├── rule_engine.py              # Reglas y alertas
-│   └── models/
-│       ├── vehicle.py              # Modelo de datos: vehículo
-│       ├── mission.py              # Modelo de datos: misión
-│       └── telemetry.py            # Modelo de datos: telemetría
-│
-├── ai/
-│   ├── __init__.py
-│   ├── anomaly_detector.py         # Detección de anomalías
-│   ├── failure_predictor.py        # Predicción de fallos
-│   └── decision_assistant.py       # Asistente IA
-│
-├── api/
-│   ├── Dockerfile                  # Imagen de la API (ARM64)
-│   ├── requirements.txt            # Dependencias de la API
-│   ├── __init__.py
-│   ├── main.py                     # Aplicación FastAPI
-│   ├── websocket.py                # WebSocket handler
-│   └── routes/
-│       ├── twin.py                 # GET /twin/state, /twin/history
-│       ├── simulation.py           # POST /simulate/scenario
-│       ├── alerts.py               # GET /alerts
-│       └── ecosystem.py            # GET /ecosystem/status
-│
-├── dashboard/
-│   ├── Dockerfile                  # Imagen del dashboard (ARM64)
-│   ├── requirements.txt            # Dependencias del dashboard
-│   └── app.py                      # Streamlit dashboard
-│
-├── ecosystem/
-│   ├── __init__.py
-│   ├── connector.py                # Conexión con otros gemelos
-│   ├── event_bus.py                # Bus de eventos inter-gemelos
-│   └── protocols.py                # Definición de protocolos
-│
-├── config/
-│   └── settings.py                 # Configuración centralizada
-│
-├── data/                           # Volumen persistente (montado en Pi)
-│   ├── sqlite/                     # Base de datos SQLite
-│   └── influxdb/                   # Datos InfluxDB
-│
-├── tests/
-│   ├── test_twin_engine.py
-│   ├── test_anomaly_detector.py
-│   ├── test_simulator.py
-│   └── test_api.py
-│
-└── docs/
-    ├── arquitectura.md
-    ├── modelo_datos.md
-    └── ecosistema.md
-```
+| Capa | Tecnologia | Justificacion |
+|------|-----------|---------------|
+| Lenguaje | Python 3.11+ | Ecosistema ML maduro, prototipado rapido |
+| Simulacion | Generadores custom + OSM | Telemetria realista + rutas por calles reales |
+| Cartografia | osmnx + networkx | Grafo vial de Valencia, Dijkstra optimizado |
+| Mensajeria | MQTT (Mosquitto) | Protocolo estandar IoT, pub/sub, ligero |
+| Backend/API | FastAPI | Async, alto rendimiento, OpenAPI auto |
+| Base de datos | SQLite + InfluxDB | Persistencia ligera + series temporales |
+| IA — Anomalias | scikit-learn (Isolation Forest) | Sin entrenamiento supervisado |
+| IA — Prediccion | statsmodels (ARIMA) | Series temporales en edge |
+| Dashboard | Streamlit + Plotly + Folium | Dashboards interactivos en Python |
+| Tiempo real | WebSockets + MQTT | Streaming bidireccional |
+| Contenedores | Docker Compose | Despliegue reproducible |
+| Infraestructura | Raspberry Pi 5 (8GB) + SSD | Edge computing, bajo coste |
 
 ---
 
-## 📊 Modelo de Datos
+## Funcionalidades Implementadas
 
-### Vehículo (Estado del Gemelo)
+### 1. Simulador de Telemetria
 
-```python
-class VehicleState(BaseModel):
-    # Identificación
-    vehicle_id: str               # "BOM-001"
-    vehicle_type: str             # "camion_bomberos_BUP"
+El simulador genera datos realistas cada 2 segundos para un camion de bomberos BUP:
 
-    # Motor y mecánica
-    engine_temp: float            # °C (normal: 80-100)
-    engine_rpm: int               # RPM
-    fuel_level: float             # % (0-100)
-    oil_pressure: float           # PSI
-    battery_voltage: float        # V (normal: 12.4-14.7)
-    brake_wear: float             # % desgaste (0-100)
-    tire_pressure: dict           # {"FL": 35, "FR": 35, "RL": 33, "RR": 33} PSI
-    mileage_km: float             # Kilometraje total
+- **Motor:** temperatura, RPM, combustible, aceite, bateria, frenos, neumaticos
+- **GPS:** posicion en coordenadas reales de Valencia, velocidad, rumbo
+- **Equipamiento:** tanque de agua/espuma, bomba de presion, escalera hidraulica, manguera
+- **Mision:** ciclo completo disponible → en_ruta → en_escena → regreso_base
 
-    # Ubicación y movimiento
-    latitude: float
-    longitude: float
-    speed_kmh: float
-    heading: float                # Grados (0-360)
+### 2. Motor de Gemelo Digital (Twin Engine)
 
-    # Equipamiento contra incendios
-    water_tank_level: float       # % tanque de agua (0-100)
-    foam_tank_level: float        # % tanque de espuma (0-100)
-    pump_pressure: float          # PSI de la bomba de agua
-    ladder_status: str            # "retracted" | "extended" | "fault"
-    ladder_angle: float           # Grados de elevación (0-75)
-    hose_deployed: bool           # Manguera desplegada
-    hydraulic_pressure: float     # PSI sistema hidráulico
-    crew_count: int               # Bomberos a bordo
+- **Gestion de estado** con persistencia en SQLite cada 10 ticks
+- **Motor de reglas** con umbrales configurables para alertas automaticas
+- **Procesador de eventos** que enruta telemetria a los modulos de IA
 
-    # Misión
-    mission_status: str           # "disponible" | "en_ruta" | "en_escena" | "regreso_base"
-    sirens_active: bool
-    lights_active: bool
+### 3. Inteligencia Artificial
 
-    # Metadatos
-    timestamp: datetime
-    anomalies: list[str]          # Anomalías activas
-    risk_score: float             # 0.0 - 1.0
-```
+- **Deteccion de Anomalias:** Isolation Forest sobre 8 metricas simultaneas. Detecta patrones anormales sin necesidad de datos etiquetados.
+- **Prediccion de Fallos:** ARIMA para predecir tendencias de degradacion (horizonte 200s). Identifica componentes en riesgo con probabilidad y tiempo estimado.
+- **Asistente de Decisiones:** Sistema basado en reglas que genera recomendaciones accionables (solicitar cisterna, reducir operacion de bomba, alertar HAZMAT).
 
-### Telemetría (Evento Individual)
+### 4. Simulacion What-If
 
-```python
-class TelemetryEvent(BaseModel):
-    vehicle_id: str
-    timestamp: datetime
-    metric: str                   # "engine_temp", "speed_kmh", etc.
-    value: float
-    unit: str
-    source: str                   # "sensor" | "simulated"
-```
+Escenarios de simulacion ejecutables desde el dashboard:
 
-### Alerta
+| Escenario | Descripcion |
+|-----------|-------------|
+| `pump_failure_during_fire` | Fallo de bomba durante incendio activo |
+| `multi_fire_saturation` | 3 incendios simultaneos con 2 unidades |
+| `ladder_hydraulic_failure` | Fallo hidraulico durante rescate en altura |
 
-```python
-class Alert(BaseModel):
-    alert_id: str
-    vehicle_id: str
-    timestamp: datetime
-    severity: str                 # "info" | "warning" | "critical"
-    category: str                 # "mecanica" | "equipamiento" | "operativa"
-    message: str
-    metric: str
-    current_value: float
-    threshold: float
-    recommended_action: str
-```
+### 5. Modulo de Cartografia y Trafico
+
+**Routing real por calles de Valencia** usando grafos OpenStreetMap:
+
+- **GeoEngine:** Descarga y cachea el grafo vial de Valencia (18.000+ nodos, 34.000+ aristas, radio 8km). Calcula rutas con Dijkstra.
+- **Rutas optimas vs directas:** Calcula dos rutas simultaneas:
+  - *Ruta directa:* camino mas corto por distancia (Dijkstra con peso `length`)
+  - *Ruta optima:* camino mas rapido evitando trafico (Dijkstra con peso `traffic_time`)
+  - Ambas se muestran en el mapa para comparacion visual
+- **Trafico simulado:** 12 zonas de trafico en calles principales de Valencia con modelo de congestion por hora punta (7-9h, 13-14h, 17-19h). Factor 1.0 (fluido) a 2.0 (muy congestionado).
+- **POIs:** 30 hidrantes + 5 estaciones de bomberos con posiciones reales
+- **RouteSimulator:** Interpolacion tick-a-tick por coordenadas reales con velocidad variable y factor de congestion
+- **Fallback:** Si el GeoEngine no esta disponible (sin red, error OSM), el simulador usa waypoints predefinidos
+
+### 6. Dashboard Interactivo
+
+6 paginas con visualizacion en tiempo real:
+
+- **Estado en Tiempo Real:** 8 gauges (motor, agua, combustible, bateria, bomba, espuma, hidraulica, RPM) + metricas instantaneas
+- **Alertas:** Activas, historico, anomalias con risk score
+- **Telemetria:** Graficos historicos multi-metrica, velocidad/RPM dual axis, niveles de tanques
+- **Mapa:** Mapa interactivo Folium con:
+  - Posicion del vehiculo en tiempo real
+  - Ruta optima (linea solida coloreada segun congestion)
+  - Ruta directa (linea gris discontinua para comparacion)
+  - Zonas de trafico con circulos coloreados (verde/amarillo/naranja/rojo)
+  - Hidrantes (circulos azules) y estaciones de bomberos (marcadores rojos)
+  - Leyenda visual + metricas de comparacion (distancia, tiempo ahorrado)
+  - ETA, progreso, distancia restante con barra de progreso
+- **Simulacion:** Ejecutar escenarios what-if con graficos de resultados
+- **Predicciones:** Prediccion de fallos y mantenimiento preventivo
+
+### 7. Boton de Emergencia
+
+Boton "SIMULAR EMERGENCIA" en el dashboard que envia un comando MQTT al simulador para forzar una emergencia inmediata, permitiendo demostrar el sistema en vivo.
 
 ---
 
-## 🔌 API Endpoints
+## Protocolo MQTT
 
-### Estado del Gemelo
-```
-GET  /api/v1/twin/{vehicle_id}/state         → Estado actual completo
-GET  /api/v1/twin/{vehicle_id}/history        → Histórico de estados
-GET  /api/v1/twin/{vehicle_id}/health         → Resumen de salud del vehículo
-WS   /api/v1/twin/{vehicle_id}/stream         → WebSocket tiempo real
-```
+### Topics
 
-### Alertas y Anomalías
 ```
-GET  /api/v1/alerts/{vehicle_id}              → Alertas activas
-GET  /api/v1/alerts/{vehicle_id}/history      → Histórico de alertas
-GET  /api/v1/anomalies/{vehicle_id}           → Anomalías detectadas
+bomberos/telemetria/BOM-001    → Telemetria cada 2s (JSON completo)
+bomberos/alertas/BOM-001       → Alertas del twin-engine
+bomberos/comandos/BOM-001      → Comandos externos (force_emergency)
+bomberos/estado/BOM-001        → Estado resumido de mision
+bomberos/ruta/BOM-001          → Datos de ruta activa
 ```
 
-### Simulación
-```
-POST /api/v1/simulate/scenario                → Ejecutar escenario "what-if"
-GET  /api/v1/simulate/scenarios               → Escenarios disponibles
-POST /api/v1/simulate/failure                  → Simular fallo específico
-```
+### Mensaje de ruta (route_started)
 
-### Predicción (IA)
-```
-GET  /api/v1/predict/{vehicle_id}/failures    → Predicción de fallos
-GET  /api/v1/predict/{vehicle_id}/maintenance → Mantenimiento preventivo
-```
-
-### Ecosistema
-```
-GET  /api/v1/ecosystem/status                 → Estado de gemelos conectados
-POST /api/v1/ecosystem/event                  → Enviar evento al ecosistema
-GET  /api/v1/ecosystem/twins                  → Lista de gemelos registrados
-```
-
----
-
-## 🤖 Componentes de IA
-
-### 1. Detección de Anomalías
-
-**Algoritmo:** Isolation Forest + Local Outlier Factor (LOF)
-
-```python
-# Ejemplo de uso
-detector = AnomalyDetector()
-detector.fit(historical_telemetry)
-
-# Evaluar nuevo dato
-result = detector.evaluate({
-    "engine_temp": 115.0,    # Anormalmente alto
-    "pump_pressure": 18.0,   # Bajo
-    "battery_voltage": 11.2  # Bajo
-})
-# result: {"is_anomaly": True, "score": 0.87, "features": ["engine_temp", "pump_pressure"]}
-```
-
-**Métricas monitoreadas:**
-- Temperatura del motor (sobrecalentamiento)
-- Presión de bomba de agua (fallo de bomba)
-- Nivel de agua/espuma (suministro insuficiente)
-- Presión hidráulica (fallo de escalera)
-- Voltaje de batería (fallo eléctrico)
-
-### 2. Predicción de Fallos
-
-**Algoritmo:** Prophet / LSTM para series temporales
-
-```python
-predictor = FailurePredictor()
-predictor.train(vehicle_history)
-
-# Predecir próximos fallos
-predictions = predictor.predict(vehicle_id="BOM-001", horizon_hours=48)
-# [
-#   {"component": "bomba_agua", "probability": 0.73, "estimated_hours": 18},
-#   {"component": "sistema_hidraulico", "probability": 0.45, "estimated_hours": 36}
-# ]
-```
-
-### 3. Asistente de Decisiones
-
-Basado en reglas + scoring para recomendar acciones:
-
-| Situación                          | Decisión Sugerida                                    |
-|------------------------------------|------------------------------------------------------|
-| Agua < 15% en incendio activo      | Solicitar cisterna de apoyo                          |
-| Temperatura motor > 110°C          | Reducir operación de bomba, solicitar relevo         |
-| Espuma < 20% y fuego químico       | Alertar central, redirigir unidad HAZMAT             |
-| Fallo bomba de agua                | Activar bomba auxiliar, solicitar unidad de respaldo |
-| Presión hidráulica baja (escalera) | Retracción manual, no desplegar más                  |
-| 2+ anomalías simultáneas           | Evacuar equipo del vehículo, enviar reemplazo        |
-
----
-
-## 🎭 Escenarios de Simulación ("What-If")
-
-### Escenario 1: Fallo de bomba durante incendio
 ```json
 {
-  "scenario": "pump_failure_during_fire",
-  "description": "La bomba de agua falla durante un incendio activo",
-  "parameters": {
-    "initial_pump_pressure": 150,
-    "pressure_drop_rate": 5.0,
-    "fire_intensity": "alto",
-    "backup_pump_available": true
-  }
+  "type": "route_started",
+  "coords": [[39.47, -0.37], ...],
+  "direct_coords": [[39.47, -0.38], ...],
+  "destination": "Puerto de Valencia",
+  "total_distance_m": 3776,
+  "direct_distance_m": 3226,
+  "eta_seconds": 227,
+  "congestion_factor": 1.3
 }
 ```
 
-### Escenario 2: Múltiples incendios simultáneos
-```json
-{
-  "scenario": "multi_fire_saturation",
-  "description": "3 incendios simultáneos con solo 2 unidades disponibles",
-  "parameters": {
-    "fires": 3,
-    "available_units": 2,
-    "severity_levels": ["structural", "vehicle", "wildfire"]
-  }
-}
-```
+### Telemetria (cada tick)
 
-### Escenario 3: Fallo de escalera hidráulica
 ```json
 {
-  "scenario": "ladder_hydraulic_failure",
-  "description": "La escalera hidráulica falla durante rescate en altura",
-  "parameters": {
-    "equipment": "hydraulic_ladder",
-    "failure_type": "hydraulic_pressure_loss",
-    "rescue_height_meters": 25,
-    "people_stranded": 4
-  }
+  "vehicle_id": "BOM-001",
+  "engine_temp": 95.3,
+  "speed_kmh": 65.0,
+  "water_tank_level": 87.5,
+  "pump_pressure": 130.0,
+  "route_progress": 0.45,
+  "eta_seconds": 102,
+  "distance_remaining_m": 1350,
+  "on_route": true,
+  "mission_status": "en_ruta",
+  "timestamp": "2026-03-02T22:30:00Z"
 }
 ```
 
 ---
 
-## 🌐 Integración con el Ecosistema
+## API Endpoints
 
-El gemelo está diseñado para operar dentro de una red de activos interconectados:
+### Estado del Gemelo (`/api/v1/twin`)
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | `/{vehicle_id}/state` | Estado actual completo |
+| GET | `/{vehicle_id}/history` | Historico de estados |
+| GET | `/{vehicle_id}/health` | Salud del vehiculo |
+| WS | `/{vehicle_id}/stream` | WebSocket tiempo real |
 
-```
-                    ┌─────────────────────┐
-                    │   CENTRO DE MANDO   │
-                    │   (Orchestrator)    │
-                    └─────────┬───────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-    ┌─────────▼──────┐ ┌─────▼──────┐ ┌──────▼─────────┐
-    │  Gemelo BOM-001│ │ Gemelo     │ │ Gemelo         │
-    │  (Bomberos)    │ │ POL-001    │ │ AMB-001        │
-    │  *** ESTE ***  │ │ (Patrulla) │ │ (Ambulancia)   │
-    └─────────┬──────┘ └─────┬──────┘ └──────┬─────────┘
-              │               │               │
-              └───────────────┼───────────────┘
-                              │
-                    ┌─────────▼───────────┐
-                    │  ENTORNO DIGITAL    │
-                    │  - Tráfico          │
-                    │  - Clima            │
-                    │  - Hidrantes        │
-                    │  - Estaciones       │
-                    └─────────────────────┘
-```
+### Alertas y Anomalias
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | `/alerts/{vehicle_id}` | Alertas activas |
+| GET | `/alerts/{vehicle_id}/history` | Historico de alertas |
+| GET | `/anomalies/{vehicle_id}` | Anomalias + risk score |
 
-### Eventos que recibe del entorno
-- Nuevos incendios/emergencias asignados
-- Cambios en tráfico/clima
-- Estado de hidrantes (disponibilidad, presión)
-- Órdenes del centro de mando
+### Simulacion (`/api/v1/simulate`)
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | `/scenarios` | Escenarios disponibles |
+| POST | `/scenario` | Ejecutar what-if |
+| POST | `/failure` | Simular fallo |
 
-### Información que comparte
-- Estado actual del vehículo y misión
-- Alertas y anomalías detectadas
-- Tiempo estimado de llegada (ETA)
-- Disponibilidad y capacidad operativa
+### Prediccion IA (`/api/v1/predict`)
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | `/{vehicle_id}/failures` | Prediccion de fallos |
+| GET | `/{vehicle_id}/maintenance` | Mantenimiento preventivo |
 
-### Protocolo de comunicación
-```python
-# Formato de mensaje inter-gemelos (MQTT)
-{
-    "source": "BOM-001",
-    "target": "COMMAND_CENTER",   # o "ALL", o "POL-001"
-    "event_type": "status_update", # | "alert" | "request_backup" | "mission_complete"
-    "payload": { ... },
-    "timestamp": "2025-02-27T14:30:00Z",
-    "priority": "high"            # "low" | "medium" | "high" | "critical"
-}
-```
+### Cartografia y Trafico (`/api/v1/geo`)
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | `/{vehicle_id}/route` | Ruta activa (optima + directa) |
+| GET | `/poi/hydrants` | Hidrantes de Valencia |
+| GET | `/poi/stations` | Estaciones de bomberos |
+| GET | `/traffic/current` | Factor de congestion global |
+| GET | `/traffic/zones` | Congestion por zona (12 zonas) |
+| POST | `/force-emergency` | Forzar emergencia |
+
+### Ecosistema (`/api/v1/ecosystem`)
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | `/status` | Estado de gemelos conectados |
+| GET | `/twins` | Lista de gemelos registrados |
+| POST | `/event` | Enviar evento inter-gemelo |
 
 ---
 
-## 🚀 Despliegue en Raspberry Pi 5
+## Despliegue
 
-### Hardware necesario
-- Raspberry Pi 5 (8GB RAM recomendado, 4GB mínimo)
-- SSD USB 3.0 (recomendado, evitar SD para escrituras intensivas)
-- Fuente de alimentación USB-C 5V/5A oficial
-- Conexión de red (Ethernet o WiFi)
+### Requisitos
 
-### Preparación de la Pi
+- Docker + Docker Compose v2+
+- Raspberry Pi 5 (8GB) con SSD USB 3.0, o cualquier maquina x86/ARM64
+
+### Arranque rapido
 
 ```bash
-# 1. Instalar Raspberry Pi OS (64-bit) — Bookworm o superior
-# Usar Raspberry Pi Imager con la imagen de 64-bit (ARM64)
-
-# 2. Instalar Docker
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Cerrar sesión y volver a entrar para aplicar el grupo
-
-# 3. Instalar Docker Compose (plugin)
-sudo apt install docker-compose-plugin
-
-# 4. Verificar instalación
-docker --version          # Docker 24+
-docker compose version    # Compose v2+
-uname -m                  # aarch64 (ARM64)
-```
-
-### Instalación del proyecto
-
-```bash
-# Clonar el repositorio
-git clone https://github.com/tu-equipo/bomberos-digital-twin.git
-cd bomberos-digital-twin
-
-# Copiar configuración
+git clone https://github.com/tu-equipo/HPEFumadas.git
+cd HPEFumadas
 cp .env.example .env
-# Editar .env con los valores deseados (puertos, claves API, etc.)
-
-# Crear directorios para volúmenes persistentes
-mkdir -p data/sqlite data/influxdb
+docker compose up --build -d
 ```
 
-### Levantar todos los servicios
+### Acceso
+
+| Servicio | Puerto | URL |
+|----------|--------|-----|
+| Dashboard | 8501 | http://localhost:8501 |
+| API REST | 8002 | http://localhost:8002 |
+| API Docs | 8002 | http://localhost:8002/docs |
+| MQTT Broker | 1883 | mqtt://localhost:1883 |
+| InfluxDB | 8086 | http://localhost:8086 |
+
+### Recursos estimados
+
+| Contenedor | RAM | CPU |
+|------------|-----|-----|
+| mosquitto | ~20 MB | Minimo |
+| simulator | ~300 MB | Medio (osmnx) |
+| twin-engine | ~200 MB | Medio (IA) |
+| api | ~100 MB | Bajo |
+| dashboard | ~150 MB | Bajo |
+| influxdb | ~150 MB | Bajo |
+| **Total** | **~920 MB** | **Holgado en Pi 5** |
+
+---
+
+## Estructura del Proyecto
+
+```
+HPEFumadas/
+|
+|-- docker-compose.yml
+|-- .env / .env.example
+|-- README.md
+|
+|-- config/
+|   +-- settings.py                  # Configuracion centralizada (MQTT, IDs, topics)
+|
+|-- simulator/
+|   |-- Dockerfile
+|   |-- requirements.txt             # paho-mqtt, osmnx, networkx, scikit-learn
+|   |-- vehicle_simulator.py         # Generador de telemetria + GeoEngine
+|   |-- mission_simulator.py         # Ciclo de vida de misiones
+|   |-- scenario_engine.py           # Motor what-if
+|   +-- data/
+|       |-- routes.json              # 4 rutas predefinidas (fallback)
+|       +-- failure_profiles.json    # Perfiles de fallo
+|
+|-- core/
+|   |-- Dockerfile
+|   |-- requirements.txt
+|   |-- twin_engine.py               # Motor principal del gemelo
+|   |-- state_manager.py             # Estado + persistencia SQLite
+|   |-- event_processor.py           # Procesador de eventos MQTT
+|   |-- rule_engine.py               # Reglas y alertas
+|   +-- models/
+|       |-- vehicle.py               # VehicleState (45+ campos)
+|       |-- mission.py               # Modelo de mision
+|       +-- telemetry.py             # Evento de telemetria
+|
+|-- ai/
+|   |-- anomaly_detector.py          # Isolation Forest
+|   |-- failure_predictor.py         # ARIMA prediccion
+|   +-- decision_assistant.py        # Asistente de decisiones
+|
+|-- geo/
+|   |-- __init__.py
+|   |-- engine.py                    # GeoEngine: grafo OSM, shortest_route, fastest_route
+|   |-- route_simulator.py           # Interpolacion tick-a-tick por ruta real
+|   |-- traffic.py                   # Modelo de congestion + zonas de trafico
+|   |-- poi.py                       # Cargador de POIs (hidrantes, estaciones)
+|   |-- data/
+|   |   |-- hydrants.json            # 30 hidrantes de Valencia
+|   |   +-- stations.json            # 5 estaciones de bomberos
+|   +-- cache/
+|       +-- .gitkeep                 # Cache del grafo .graphml (Docker volume)
+|
+|-- api/
+|   |-- Dockerfile
+|   |-- requirements.txt
+|   |-- main.py                      # FastAPI app
+|   |-- state.py                     # Estado compartido (MQTT subscriber)
+|   |-- websocket.py                 # WebSocket handler
+|   +-- routes/
+|       |-- twin.py                  # /twin endpoints
+|       |-- alerts.py                # /alerts + /anomalies
+|       |-- simulation.py            # /simulate endpoints
+|       |-- prediction.py            # /predict endpoints
+|       |-- geo.py                   # /geo endpoints (rutas, POIs, trafico)
+|       +-- ecosystem.py            # /ecosystem endpoints
+|
+|-- dashboard/
+|   |-- Dockerfile
+|   |-- requirements.txt
+|   +-- app.py                       # Streamlit dashboard (6 paginas)
+|
+|-- ecosystem/
+|   |-- connector.py                 # Conexion con otros gemelos
+|   |-- event_bus.py                 # Bus de eventos inter-gemelos
+|   +-- protocols.py                 # Protocolos de comunicacion
+|
+|-- mosquitto/
+|   +-- mosquitto.conf               # Config del broker MQTT
+|
++-- data/                            # Volumenes persistentes
+    |-- sqlite/
+    +-- influxdb/
+```
+
+---
+
+## Roadmap — Proximas Fases
+
+### Fase 1: Centro de Mando Interactivo (Prioridad ALTA)
+
+Transformar el dashboard de "monitor pasivo" a **centro de control operativo**:
+
+| Funcionalidad | Descripcion | Impacto |
+|---------------|-------------|---------|
+| **Dispatch manual** | Arrastrar-y-soltar vehiculos a emergencias desde el mapa | El operador asigna misiones, no solo las observa |
+| **Chat de mando** | Canal de texto en tiempo real entre centro y vehiculos via MQTT | Comunicacion bidireccional integrada |
+| **Alertas con acciones** | Cada alerta presenta botones de accion (confirmar, escalar, descartar) | Gestion activa de alertas, no solo visualizacion |
+| **Timeline de mision** | Linea temporal visual del ciclo de mision con marcas de eventos | Trazabilidad completa de cada intervencion |
+| **Modo pantalla completa** | Vista optimizada para pantalla grande en sala de control | Presentacion profesional para demo |
+
+### Fase 2: Gestion Inteligente de Alarmas
+
+Evolucionar de alertas simples a un **sistema de gestion de alarmas industrial**:
+
+```
+Nivel 1: INFORMATIVA
+  |  (log, no accion)
+  v
+Nivel 2: ADVERTENCIA
+  |  (notificacion al operador, confirmar en 60s)
+  v
+Nivel 3: CRITICA
+  |  (sirena visual/sonora, accion requerida en 30s)
+  v
+Nivel 4: EMERGENCIA
+     (accion automatica + notificacion a toda la cadena de mando)
+```
+
+| Tipo de Alarma | Trigger | Accion Automatica |
+|----------------|---------|-------------------|
+| Mecanica | Motor > 115C, bomba < 30 PSI | Reducir operacion, solicitar relevo |
+| Operativa | Agua < 15% en escena | Despachar cisterna |
+| Seguridad | 2+ anomalias simultaneas | Evacuacion del vehiculo |
+| Coordinacion | Vehiculo no responde en 30s | Alertar centro de mando |
+| Escalado | Incendio > capacidad | Solicitar refuerzos automaticamente |
+
+**Flujo de escalado:**
+1. Alerta detectada por twin-engine (reglas + IA)
+2. Publicacion en `bomberos/alertas/{ID}` con severity y acciones sugeridas
+3. Dashboard muestra alerta con botones de accion
+4. Si no hay respuesta en X segundos, auto-escalado al nivel superior
+5. Nivel 4: accion automatica + notificacion push al jefe de operaciones
+
+### Fase 3: Protocolos de Interoperabilidad
+
+Integrar estandares reales de emergencias:
+
+| Protocolo | Uso | Implementacion |
+|-----------|-----|----------------|
+| **CAP** (Common Alerting Protocol) | Formato estandar de alertas OASIS | Wrapper XML/JSON sobre MQTT |
+| **NIMS/ICS** | Sistema de Mando de Incidentes | Roles (IC, Operations, Logistics) en el modelo |
+| **EMSI** (Emergency Management Shared Information) | Compartir info entre agencias | API REST inter-organizacion |
+| **TETRA/P25** | Radio digital de emergencias | Simulacion de canal de voz via WebSocket |
+
+**Mensaje inter-agencia (propuesta CAP simplificado):**
+
+```json
+{
+  "identifier": "BOM-001-2026-03-02-001",
+  "sender": "bomberos-valencia",
+  "sent": "2026-03-02T22:30:00+01:00",
+  "status": "Actual",
+  "msgType": "Alert",
+  "scope": "Restricted",
+  "info": {
+    "category": "Fire",
+    "event": "Incendio estructural",
+    "urgency": "Immediate",
+    "severity": "Severe",
+    "certainty": "Observed",
+    "area": {
+      "description": "Puerto de Valencia, Nave 12",
+      "circle": "39.4500,-0.3250 0.5"
+    },
+    "resources_needed": ["BOM", "AMB", "POL"],
+    "units_dispatched": ["BOM-001", "AMB-001"]
+  }
+}
+```
+
+### Fase 4: IA Avanzada
+
+| Capacidad | Algoritmo | Descripcion |
+|-----------|-----------|-------------|
+| **Despliegue predictivo** | Clustering + series temporales | Pre-posicionar vehiculos en zonas de alto riesgo segun hora/dia |
+| **Estimacion de recursos** | Clasificador ML | Dado tipo de emergencia, estimar bomberos/agua/espuma necesarios |
+| **Optimizacion de flota** | Programacion lineal | Asignar vehiculos a emergencias minimizando tiempo total de respuesta |
+| **NLP para despacho** | LLM (Claude API) | Operador describe emergencia en texto libre, sistema extrae tipo/ubicacion/severidad |
+| **Vision por camara** | YOLO/deteccion objetos | Detectar humo/fuego desde camaras del vehiculo (futuro con hardware real) |
+
+### Fase 5: Hardware Real (Post-Hackathon)
+
+| Componente | Proposito | Conexion |
+|------------|-----------|----------|
+| GPS modulo (NEO-6M) | Posicion real del vehiculo | UART → Raspberry Pi |
+| Sensores OBD-II | Telemetria real del motor | Bluetooth → adapter |
+| Sensor de flujo | Nivel real de tanque de agua | GPIO → ADC |
+| Camara termica | Deteccion de focos de calor | USB → OpenCV |
+| LoRa modulo | Comunicacion en zonas sin cobertura | SPI → gateway |
+
+---
+
+## Demo Rapida
 
 ```bash
-# Construir imágenes ARM64 y levantar
+# 1. Levantar todo
 docker compose up --build -d
 
-# Ver logs en tiempo real
-docker compose logs -f
+# 2. Abrir dashboard
+# http://localhost:8501
 
-# Ver estado de los contenedores
-docker compose ps
-```
+# 3. Ir a la pagina "Mapa"
 
-### Servicios disponibles
+# 4. Pulsar "SIMULAR EMERGENCIA" en el sidebar
 
-| Servicio            | Contenedor   | Puerto   | URL                      |
-|---------------------|--------------|----------|--------------------------|
-| API REST            | `api`        | 8000     | http://<IP_PI>:8000      |
-| Docs API (Swagger)  | `api`        | 8000     | http://<IP_PI>:8000/docs |
-| Dashboard           | `dashboard`  | 8501     | http://<IP_PI>:8501      |
-| MQTT Broker         | `mosquitto`  | 1883     | mqtt://<IP_PI>:1883      |
-| InfluxDB (opcional) | `influxdb`   | 8086     | http://<IP_PI>:8086      |
+# 5. Observar:
+#    - Vehiculo se mueve por calles reales de Valencia
+#    - Ruta optima (linea solida) vs ruta directa (linea gris discontinua)
+#    - Zonas de trafico coloreadas por congestion
+#    - ETA y progreso actualizandose
+#    - Hidrantes y estaciones de bomberos en el mapa
 
-> Accede desde cualquier dispositivo en la misma red usando la IP de la Pi.
-> Para obtenerla: `hostname -I`
+# 6. Ir a "Estado en Tiempo Real" para ver los gauges del motor
 
-### Gestión de servicios
+# 7. Ir a "Alertas" para ver anomalias detectadas por IA
 
-```bash
-# Parar todos los servicios
-docker compose down
-
-# Reiniciar un servicio específico
-docker compose restart twin-engine
-
-# Ver logs de un servicio
-docker compose logs -f simulator
-
-# Reconstruir solo un servicio tras cambios
-docker compose up --build -d api
-
-# Ver consumo de recursos por contenedor
-docker stats
-```
-
-### Estimación de recursos en Pi 5
-
-| Contenedor   | RAM estimada   | CPU                    |
-|--------------|----------------|------------------------|
-| mosquitto    | ~20 MB         | Mínimo                 |
-| simulator    | ~80 MB         | Bajo                   |
-| twin-engine  | ~200 MB        | Medio (IA)             |
-| api          | ~100 MB        | Bajo                   |
-| dashboard    | ~150 MB        | Bajo                   |
-| influxdb     | ~150 MB        | Bajo                   |
-| **Total**    | **~700 MB**    | **Holgado en 4 cores** |
-
-### Desarrollo local (sin Docker)
-
-Para desarrollo rápido en PC sin necesidad de la Pi:
-
-```bash
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate        # Linux/Mac
-venv\Scripts\activate           # Windows
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Levantar solo el broker MQTT con Docker
-docker run -d -p 1883:1883 -p 9001:9001 eclipse-mosquitto
-
-# En terminales separadas:
-uvicorn api.main:app --reload --port 8000
-python -m simulator.vehicle_simulator
-streamlit run dashboard/app.py
+# 8. Ir a "Simulacion" para ejecutar escenarios what-if
 ```
 
 ---
 
-## 🐳 Docker Compose
+## Equipo
 
-```yaml
-# docker-compose.yml
-services:
-  mosquitto:
-    image: eclipse-mosquitto:2
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-    restart: unless-stopped
-
-  simulator:
-    build: ./simulator
-    depends_on:
-      - mosquitto
-    environment:
-      - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
-    restart: unless-stopped
-
-  twin-engine:
-    build: ./core
-    depends_on:
-      - mosquitto
-      - influxdb
-    environment:
-      - MQTT_HOST=mosquitto
-      - INFLUX_HOST=influxdb
-    restart: unless-stopped
-
-  api:
-    build: ./api
-    ports:
-      - "8000:8000"
-    depends_on:
-      - twin-engine
-      - mosquitto
-    environment:
-      - MQTT_HOST=mosquitto
-    restart: unless-stopped
-
-  dashboard:
-    build: ./dashboard
-    ports:
-      - "8501:8501"
-    depends_on:
-      - api
-    environment:
-      - API_URL=http://api:8000
-    restart: unless-stopped
-
-  influxdb:
-    image: influxdb:2-alpine
-    ports:
-      - "8086:8086"
-    volumes:
-      - ./data/influxdb:/var/lib/influxdb2
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=bomberos2025
-      - DOCKER_INFLUXDB_INIT_ORG=bomberos
-      - DOCKER_INFLUXDB_INIT_BUCKET=telemetria
-    restart: unless-stopped
-
-networks:
-  default:
-    name: bomberos-net
-```
-
-> Todas las imágenes base (`python:3.11-slim`, `eclipse-mosquitto:2`, `influxdb:2-alpine`) tienen soporte nativo ARM64 para Raspberry Pi.
+| Rol | Responsabilidad |
+|-----|----------------|
+| Arquitecto | Diseno del sistema, modelo de datos, infraestructura Docker |
+| Backend Developer | API, motor del gemelo, GeoEngine, procesamiento MQTT |
+| Data Scientist | Modelos de IA (anomalias, prediccion, decisiones) |
+| Frontend/Dashboard | Visualizacion Streamlit, mapa interactivo, UX |
 
 ---
 
-## 📦 Dependencias por servicio
-
-Cada microservicio tiene su propio `requirements.txt` para mantener imágenes Docker ligeras:
-
-**simulator/requirements.txt**
-```
-paho-mqtt==1.6.1
-python-dotenv==1.0.0
-loguru==0.7.2
-```
-
-**core/requirements.txt** (twin-engine)
-```
-paho-mqtt==1.6.1
-scikit-learn==1.4.0
-prophet==1.1.5
-numpy==1.26.3
-pandas==2.1.5
-sqlalchemy==2.0.25
-aiosqlite==0.19.0
-influxdb-client==1.40.0
-python-dotenv==1.0.0
-loguru==0.7.2
-```
-
-**api/requirements.txt**
-```
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-websockets==12.0
-pydantic==2.5.3
-paho-mqtt==1.6.1
-python-dotenv==1.0.0
-loguru==0.7.2
-```
-
-**dashboard/requirements.txt**
-```
-streamlit==1.30.0
-plotly==5.18.0
-requests==2.31.0
-websocket-client==1.7.0
-python-dotenv==1.0.0
-```
-
----
-
-## 🧪 Tests
-
-```bash
-# Ejecutar todos los tests
-pytest tests/ -v
-
-# Ejecutar tests específicos
-pytest tests/test_twin_engine.py -v
-pytest tests/test_anomaly_detector.py -v
-
-# Coverage
-pytest tests/ --cov=core --cov=ai --cov-report=html
-```
-
----
-
-## 📐 Diagrama de Flujo — Ciclo del Gemelo
-
-```
-  Sensor/Simulador
-        │
-        ▼
-  ┌──────────┐    ┌──────────────┐    ┌─────────────┐
-  │  MQTT    │───▶│ Event        │───▶│ State       │
-  │  Broker  │    │ Processor    │    │ Manager     │
-  └──────────┘    └──────┬───────┘    └──────┬──────┘
-                         │                   │
-                         ▼                   ▼
-                  ┌──────────────┐    ┌─────────────┐
-                  │ Rule Engine  │    │ AI Module   │
-                  │ (alertas)    │    │ (anomalías) │
-                  └──────┬───────┘    └──────┬──────┘
-                         │                   │
-                         └────────┬──────────┘
-                                  ▼
-                         ┌─────────────────┐
-                         │ Decision        │
-                         │ Assistant       │
-                         └────────┬────────┘
-                                  │
-                    ┌─────────────┼─────────────┐
-                    ▼             ▼             ▼
-              ┌──────────┐ ┌──────────┐  ┌────────────┐
-              │Dashboard │ │ Alertas  │  │ Ecosistema │
-              │          │ │          │  │ (otros     │
-              │          │ │          │  │  gemelos)  │
-              └──────────┘ └──────────┘  └────────────┘
-```
-
----
-
-## 👥 Equipo
-
-| Rol                | Responsabilidad                        |
-|--------------------|----------------------------------------|
-| Arquitecto         | Diseño del sistema y modelo de datos   |
-| Backend Developer  | API, motor del gemelo, procesamiento   |
-| Data Scientist     | Modelos de IA, detección de anomalías  |
-| Frontend/Dashboard | Visualización y experiencia de usuario |
-
----
-
-## 📄 Licencia
+## Licencia
 
 Proyecto desarrollado para el **CDS Tech Challenge — HPE GreenLake Alliance**.

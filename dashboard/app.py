@@ -26,7 +26,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     [data-testid="stMetric"] {
-        background: #f8f9fa;
+        background: rgba(28, 131, 225, 0.1);
         border-radius: 8px;
         padding: 12px 16px;
         border-left: 4px solid #3498db;
@@ -172,13 +172,30 @@ with st.sidebar:
 
     st.divider()
 
+    # Force emergency button
+    if state and state.get("mission_status") == "disponible":
+        if st.button("SIMULAR EMERGENCIA", type="primary"):
+            resp = api_post("/api/v1/geo/force-emergency", {})
+            if resp and resp.get("status") == "ok":
+                st.success("Emergencia enviada!")
+                import time as _t
+                _t.sleep(1)
+                st.rerun()
+            else:
+                st.error("Error enviando comando")
+    elif state:
+        st.button("SIMULAR EMERGENCIA", disabled=True,
+                  help="El vehiculo ya esta en mision")
+
+    st.divider()
+
     # Auto-refresh toggle
     auto = st.checkbox("Auto-refresh (5s)", value=True)
     if st.button("Actualizar ahora"):
         st.rerun()
 
-# Auto-refresh
-if auto:
+# Auto-refresh (desactivado en Mapa para no reiniciar la vista)
+if auto and page != "Mapa":
     st_autorefresh(interval=5000, key="auto_refresh")
 
 # ── Guard ───────────────────────────────────────────────────────────────────
@@ -432,12 +449,22 @@ elif page == "Telemetria":
 # ════════════════════════════════════════════════════════════════════════════
 
 elif page == "Mapa":
-    st.header("Posicion del Vehiculo")
+    st.header("Mapa y Cartografia")
 
     lat = state.get("latitude", 39.4699)
     lon = state.get("longitude", -0.3763)
     speed = state.get("speed_kmh", 0)
     mission = state.get("mission_status", "disponible")
+
+    # Sidebar layer controls
+    with st.sidebar:
+        st.markdown("### Capas del mapa")
+        show_route = st.checkbox("Ruta activa", value=True)
+        show_compare = st.checkbox("Comparar rutas (directa vs optima)", value=True)
+        show_traffic = st.checkbox("Trafico", value=True)
+        show_hydrants = st.checkbox("Hidrantes", value=True)
+        show_stations = st.checkbox("Estaciones de bomberos", value=True)
+        show_trail = st.checkbox("Recorrido historico", value=False)
 
     color_map = {
         "disponible": "green",
@@ -465,25 +492,207 @@ elif page == "Mapa":
         icon=folium.Icon(color="darkred", icon="home", prefix="fa"),
     ).add_to(m)
 
+    # Traffic zones layer
+    traffic_data = api_get("/api/v1/geo/traffic/zones") if show_traffic else None
+    if traffic_data:
+        for z in traffic_data.get("zones", []):
+            cf = z.get("congestion_factor", 1.0)
+            # Color: verde (fluido) → amarillo → naranja → rojo (congestionado)
+            if cf < 1.15:
+                tc = "#2ecc71"  # verde
+            elif cf < 1.35:
+                tc = "#f1c40f"  # amarillo
+            elif cf < 1.55:
+                tc = "#e67e22"  # naranja
+            else:
+                tc = "#e74c3c"  # rojo
+            folium.CircleMarker(
+                [z["lat"], z["lon"]],
+                radius=z.get("radius", 150) / 10,
+                color=tc,
+                fill=True,
+                fill_color=tc,
+                fill_opacity=0.25,
+                weight=1,
+                popup=f"{z['name']}: {z['description']} ({cf:.2f}x)",
+                tooltip=f"{z['name']}: {z['description']}",
+            ).add_to(m)
+
+    # Active route from geo API
+    route_data = api_get(f"/api/v1/geo/{VEHICLE_ID}/route")
+    if show_route and route_data and route_data.get("active"):
+        route_coords = route_data.get("coords", [])
+        direct_coords = route_data.get("direct_coords", [])
+
+        # Ruta directa (gris, discontinua) — si hay comparación
+        if show_compare and len(direct_coords) > 1:
+            folium.PolyLine(
+                direct_coords, color="#888888", weight=4, opacity=0.6,
+                dash_array="10 8",
+                popup="Ruta directa (mas corta por distancia)",
+                tooltip="Ruta directa",
+            ).add_to(m)
+
+        # Ruta óptima (coloreada según congestión)
+        if len(route_coords) > 1:
+            congestion = (traffic_data or {}).get("global_factor", 1.0)
+            if congestion < 1.15:
+                route_color = "#2ecc71"  # verde
+            elif congestion < 1.35:
+                route_color = "#3498db"  # azul
+            elif congestion < 1.55:
+                route_color = "#e67e22"  # naranja
+            else:
+                route_color = "#e74c3c"  # rojo
+
+            folium.PolyLine(
+                route_coords, color=route_color, weight=5, opacity=0.85,
+                popup="Ruta optima (evita trafico)",
+                tooltip="Ruta optima",
+            ).add_to(m)
+
+            # Destination marker (last coord)
+            dest = route_coords[-1]
+            dest_name = route_data.get("destination", "Destino")
+            folium.Marker(
+                dest,
+                popup=f"Destino: {dest_name}",
+                tooltip=dest_name,
+                icon=folium.Icon(color="orange", icon="fire", prefix="fa"),
+            ).add_to(m)
+
+        # Leyenda del mapa
+        if show_compare and len(direct_coords) > 1 and len(route_coords) > 1:
+            legend_html = """
+            <div style="position: fixed; bottom: 30px; left: 50px; z-index: 1000;
+                        background: rgba(0,0,0,0.75); padding: 10px 14px;
+                        border-radius: 8px; font-size: 13px; color: white;
+                        font-family: sans-serif;">
+                <b>Comparacion de rutas</b><br>
+                <span style="color: #888; font-size: 16px;">- - -</span>
+                &nbsp;Ruta directa (distancia)<br>
+                <span style="color: {rc}; font-size: 16px;">___</span>
+                &nbsp;Ruta optima (evita trafico)
+            </div>
+            """.replace("{rc}", route_color)
+            m.get_root().html.add_child(folium.Element(legend_html))
+
+    # Hydrants layer
+    if show_hydrants:
+        hydrants_resp = api_get("/api/v1/geo/poi/hydrants")
+        if hydrants_resp:
+            for h in hydrants_resp.get("hydrants", []):
+                folium.CircleMarker(
+                    [h["lat"], h["lon"]],
+                    radius=5,
+                    color="#3498db",
+                    fill=True,
+                    fill_color="#3498db",
+                    fill_opacity=0.7,
+                    popup=h.get("name", h.get("id", "Hidrante")),
+                    tooltip=h.get("id", "H"),
+                ).add_to(m)
+
+    # Fire stations layer
+    if show_stations:
+        stations_resp = api_get("/api/v1/geo/poi/stations")
+        if stations_resp:
+            for s in stations_resp.get("stations", []):
+                folium.Marker(
+                    [s["lat"], s["lon"]],
+                    popup=f"{s['name']} — {s.get('address', '')}",
+                    tooltip=s["name"],
+                    icon=folium.Icon(color="red", icon="building", prefix="fa"),
+                ).add_to(m)
+
     # Trail from history
-    trail_resp = api_get(f"/api/v1/twin/{VEHICLE_ID}/history?limit=60")
-    if trail_resp and trail_resp.get("count", 0) > 1:
-        trail = [
-            [d.get("latitude", lat), d.get("longitude", lon)]
-            for d in trail_resp["history"]
-            if d.get("speed_kmh", 0) > 0
-        ]
-        if len(trail) > 1:
-            folium.PolyLine(trail, color=color, weight=3, opacity=0.7).add_to(m)
+    if show_trail:
+        trail_resp = api_get(f"/api/v1/twin/{VEHICLE_ID}/history?limit=60")
+        if trail_resp and trail_resp.get("count", 0) > 1:
+            trail = [
+                [d.get("latitude", lat), d.get("longitude", lon)]
+                for d in trail_resp["history"]
+                if d.get("speed_kmh", 0) > 0
+            ]
+            if len(trail) > 1:
+                folium.PolyLine(trail, color=color, weight=3, opacity=0.5).add_to(m)
 
-    st_folium(m, width=None, height=500)
+    st_folium(m, width=None, height=550, returned_objects=[])
 
-    # Info below map
+    # Metrics below map
     mc1, mc2, mc3, mc4 = st.columns(4)
     mc1.metric("Latitud", f"{lat:.6f}")
     mc2.metric("Longitud", f"{lon:.6f}")
     mc3.metric("Velocidad", f"{speed:.0f} km/h")
-    mc4.metric("Rumbo", f"{state.get('heading', 0):.0f}\u00b0")
+
+    # Traffic — siempre visible
+    traffic_resp = api_get("/api/v1/geo/traffic/current")
+    if traffic_resp:
+        factor = traffic_resp.get("congestion_factor", 1.0)
+        desc = traffic_resp.get("description", "")
+        mc4.metric("Trafico", desc.upper(), delta=f"{factor:.2f}x", delta_color="off")
+    else:
+        mc4.metric("Rumbo", f"{state.get('heading', 0):.0f}\u00b0")
+
+    # Route info (ETA, progress, distance)
+    on_route = state.get("on_route", False)
+    if on_route:
+        st.divider()
+        st.subheader("Ruta Activa")
+
+        progress = state.get("route_progress", 0)
+        eta = state.get("eta_seconds", 0)
+        dist_rem = state.get("distance_remaining_m", 0)
+
+        rc1, rc2, rc3 = st.columns(3)
+        rc1.metric("Progreso", f"{progress:.0%}")
+        eta_min = int(eta // 60)
+        eta_sec = int(eta % 60)
+        rc2.metric("ETA", f"{eta_min}m {eta_sec}s")
+        if dist_rem > 1000:
+            rc3.metric("Distancia restante", f"{dist_rem / 1000:.1f} km")
+        else:
+            rc3.metric("Distancia restante", f"{dist_rem:.0f} m")
+
+        st.progress(min(progress, 1.0))
+
+        # Comparación de rutas (directa vs óptima)
+        if route_data and route_data.get("active"):
+            opt_dist = route_data.get("total_distance_m", 0)
+            dir_dist = route_data.get("direct_distance_m", 0)
+            if dir_dist > 0 and opt_dist > 0 and dir_dist != opt_dist:
+                st.divider()
+                st.subheader("Comparacion: Directa vs Optima")
+                cc1, cc2, cc3 = st.columns(3)
+                if dir_dist > 1000:
+                    cc1.metric("Ruta directa", f"{dir_dist / 1000:.1f} km")
+                else:
+                    cc1.metric("Ruta directa", f"{dir_dist:.0f} m")
+                if opt_dist > 1000:
+                    cc2.metric("Ruta optima", f"{opt_dist / 1000:.1f} km")
+                else:
+                    cc2.metric("Ruta optima", f"{opt_dist:.0f} m")
+
+                # La ruta óptima puede ser más larga en distancia pero más rápida
+                cong = route_data.get("congestion_factor", 1.0)
+                avg_speed_ms = 50 / 3.6  # 50 km/h promedio
+                time_direct = dir_dist / avg_speed_ms * cong
+                time_optima = opt_dist / avg_speed_ms
+                saved = time_direct - time_optima
+                if saved > 0:
+                    cc3.metric(
+                        "Tiempo ahorrado",
+                        f"{int(saved)}s",
+                        delta=f"{saved / time_direct:.0%} mas rapida",
+                        delta_color="normal",
+                    )
+                else:
+                    cc3.metric(
+                        "Diferencia",
+                        f"{abs(int(saved))}s",
+                        delta="misma velocidad",
+                        delta_color="off",
+                    )
 
 # ════════════════════════════════════════════════════════════════════════════
 #  SIMULACION

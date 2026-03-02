@@ -19,6 +19,7 @@ from api.routes.alerts import router as alerts_router
 from api.routes.simulation import router as simulation_router
 from api.routes.predictions import router as predictions_router
 from api.routes.ecosystem import router as ecosystem_router
+from api.routes.geo import router as geo_router
 from api.websocket import router as ws_router
 
 
@@ -53,6 +54,7 @@ app.include_router(alerts_router, prefix="/api/v1", tags=["Alertas"])
 app.include_router(simulation_router, prefix="/api/v1/simulate", tags=["Simulación"])
 app.include_router(predictions_router, prefix="/api/v1/predict", tags=["Predicción"])
 app.include_router(ecosystem_router, prefix="/api/v1/ecosystem", tags=["Ecosistema"])
+app.include_router(geo_router, prefix="/api/v1/geo", tags=["Cartografía"])
 app.include_router(ws_router, prefix="/api/v1", tags=["WebSocket"])
 
 

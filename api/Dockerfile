@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config/ ./config/
 COPY core/ ./core/
 COPY ai/ ./ai/
+COPY geo/ ./geo/
 COPY simulator/scenario_engine.py ./simulator/scenario_engine.py
 COPY simulator/__init__.py ./simulator/__init__.py
 COPY api/ ./api/

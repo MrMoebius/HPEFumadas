@@ -13,7 +13,9 @@ from datetime import datetime
 
 import paho.mqtt.client as mqtt
 from loguru import logger
-from config.settings import MQTT_HOST, MQTT_PORT, TOPIC_TELEMETRY, TOPIC_ALERTS, VEHICLE_ID
+from config.settings import (
+    MQTT_HOST, MQTT_PORT, TOPIC_TELEMETRY, TOPIC_ALERTS, TOPIC_ROUTE, VEHICLE_ID,
+)
 
 DB_PATH = os.getenv("DB_PATH", "/app/data/bomberos.db")
 
@@ -24,6 +26,7 @@ class SharedState:
         self.current_state: dict = {}
         self.state_history: deque[dict] = deque(maxlen=500)
         self.active_alerts: list[dict] = []
+        self.active_routes: dict[str, dict] = {}  # vehicle_id → route data
         self.mqtt_connected = False
         self._lock = threading.Lock()
 
@@ -36,8 +39,9 @@ class SharedState:
         if rc == 0:
             client.subscribe(TOPIC_TELEMETRY, qos=1)
             client.subscribe(TOPIC_ALERTS, qos=1)
+            client.subscribe(TOPIC_ROUTE, qos=1)
             self.mqtt_connected = True
-            logger.info(f"API suscrita a MQTT ({TOPIC_TELEMETRY})")
+            logger.info(f"API suscrita a MQTT ({TOPIC_TELEMETRY}, {TOPIC_ROUTE})")
         else:
             logger.error(f"Error MQTT: rc={rc}")
 
@@ -52,6 +56,13 @@ class SharedState:
                 if TOPIC_TELEMETRY in msg.topic:
                     self.current_state = payload
                     self.state_history.append(payload)
+                elif "bomberos/ruta/" in msg.topic:
+                    vid = msg.topic.split("/")[-1]
+                    msg_type = payload.get("type", "")
+                    if msg_type == "route_started":
+                        self.active_routes[vid] = payload
+                    elif msg_type == "route_completed":
+                        self.active_routes.pop(vid, None)
                 elif TOPIC_ALERTS in msg.topic:
                     self.active_alerts.append(payload)
         except Exception as e:
@@ -73,6 +84,10 @@ class SharedState:
         with self._lock:
             items = list(self.state_history)
             return items[-limit:]
+
+    def get_route(self, vehicle_id: str) -> dict | None:
+        with self._lock:
+            return self.active_routes.get(vehicle_id)
 
     def get_alerts(self) -> list[dict]:
         with self._lock:

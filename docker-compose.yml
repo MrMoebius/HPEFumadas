@@ -47,6 +47,8 @@ services:
       - MQTT_PORT=1883
       - VEHICLE_ID=${VEHICLE_ID:-BOM-001}
       - TICK_INTERVAL=${TICK_INTERVAL:-2}
+    volumes:
+      - geo_cache:/app/geo/cache
     restart: unless-stopped
 
   twin-engine:
@@ -120,3 +122,4 @@ networks:
 volumes:
   mosquitto_data:
   mosquitto_log:
+  geo_cache:
