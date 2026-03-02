@@ -1,0 +1,87 @@
+{
+  "engine_overheat": {
+    "description": "Sobrecalentamiento progresivo del motor",
+    "affected_metric": "engine_temp",
+    "normal_range": [80, 100],
+    "warning_threshold": 105,
+    "critical_threshold": 115,
+    "progression": {
+      "rate_per_tick": 1.5,
+      "max_value": 130,
+      "trigger_conditions": ["high_rpm_sustained", "pump_active_extended"]
+    },
+    "consequences": [
+      "Reducir RPM del motor",
+      "Desactivar bomba si temperatura > 115°C",
+      "Solicitar relevo si temperatura > 120°C"
+    ]
+  },
+  "pump_failure": {
+    "description": "Fallo progresivo de la bomba de agua",
+    "affected_metric": "pump_pressure",
+    "normal_range": [100, 160],
+    "warning_threshold": 80,
+    "critical_threshold": 30,
+    "progression": {
+      "rate_per_tick": -5.0,
+      "min_value": 0,
+      "trigger_conditions": ["extended_operation", "debris_intake"]
+    },
+    "consequences": [
+      "Activar bomba auxiliar",
+      "Reducir flujo de agua",
+      "Solicitar unidad de respaldo"
+    ]
+  },
+  "hydraulic_leak": {
+    "description": "Fuga en el sistema hidráulico de la escalera",
+    "affected_metric": "hydraulic_pressure",
+    "normal_range": [130, 160],
+    "warning_threshold": 100,
+    "critical_threshold": 60,
+    "progression": {
+      "rate_per_tick": -8.0,
+      "min_value": 0,
+      "trigger_conditions": ["ladder_extended", "vibration"]
+    },
+    "consequences": [
+      "No extender más la escalera",
+      "Iniciar retracción manual",
+      "Evacuar por vía alternativa"
+    ]
+  },
+  "battery_drain": {
+    "description": "Descarga progresiva de batería por sobrecarga eléctrica",
+    "affected_metric": "battery_voltage",
+    "normal_range": [12.4, 14.7],
+    "warning_threshold": 11.8,
+    "critical_threshold": 11.0,
+    "progression": {
+      "rate_per_tick": -0.15,
+      "min_value": 9.0,
+      "trigger_conditions": ["all_systems_active", "alternator_weak"]
+    },
+    "consequences": [
+      "Desactivar sistemas no esenciales",
+      "Alertar tripulación de fallo eléctrico inminente",
+      "Priorizar comunicaciones y bomba de agua"
+    ]
+  },
+  "water_contamination": {
+    "description": "Agua contaminada reduce eficacia contra incendio químico",
+    "affected_metric": "water_tank_level",
+    "normal_range": [0, 100],
+    "warning_threshold": 30,
+    "critical_threshold": 10,
+    "progression": {
+      "rate_per_tick": -1.5,
+      "min_value": 0,
+      "trigger_conditions": ["chemical_fire", "foam_depleted"]
+    },
+    "consequences": [
+      "Cambiar a espuma si disponible",
+      "Alertar central para unidad HAZMAT",
+      "Retirar personal a distancia segura"
+    ]
+  }
+}

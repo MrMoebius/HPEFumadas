@@ -1,0 +1,62 @@
+{
+  "incendio_centro_historico": {
+    "description": "Incendio en edificio del centro histórico de Valencia",
+    "destination": "Plaza de la Reina",
+    "waypoints": [
+      {"lat": 39.4699, "lon": -0.3763},
+      {"lat": 39.4705, "lon": -0.3750},
+      {"lat": 39.4712, "lon": -0.3738},
+      {"lat": 39.4720, "lon": -0.3725},
+      {"lat": 39.4730, "lon": -0.3710},
+      {"lat": 39.4738, "lon": -0.3700},
+      {"lat": 39.4742, "lon": -0.3690},
+      {"lat": 39.4748, "lon": -0.3680}
+    ]
+  },
+  "incendio_puerto": {
+    "description": "Incendio en almacén del puerto de Valencia",
+    "destination": "Puerto de Valencia",
+    "waypoints": [
+      {"lat": 39.4699, "lon": -0.3763},
+      {"lat": 39.4685, "lon": -0.3750},
+      {"lat": 39.4670, "lon": -0.3735},
+      {"lat": 39.4655, "lon": -0.3720},
+      {"lat": 39.4640, "lon": -0.3700},
+      {"lat": 39.4620, "lon": -0.3680},
+      {"lat": 39.4600, "lon": -0.3660},
+      {"lat": 39.4580, "lon": -0.3640},
+      {"lat": 39.4560, "lon": -0.3615},
+      {"lat": 39.4545, "lon": -0.3590}
+    ]
+  },
+  "incendio_ciudad_artes": {
+    "description": "Incendio cerca de la Ciudad de las Artes y las Ciencias",
+    "destination": "Ciudad de las Artes",
+    "waypoints": [
+      {"lat": 39.4699, "lon": -0.3763},
+      {"lat": 39.4680, "lon": -0.3750},
+      {"lat": 39.4660, "lon": -0.3740},
+      {"lat": 39.4640, "lon": -0.3720},
+      {"lat": 39.4615, "lon": -0.3695},
+      {"lat": 39.4590, "lon": -0.3665},
+      {"lat": 39.4565, "lon": -0.3630},
+      {"lat": 39.4545, "lon": -0.3600},
+      {"lat": 39.4530, "lon": -0.3575},
+      {"lat": 39.4520, "lon": -0.3555},
+      {"lat": 39.4535, "lon": -0.3530},
+      {"lat": 39.4540, "lon": -0.3510}
+    ]
+  },
+  "rescate_turia": {
+    "description": "Rescate en los Jardines del Turia",
+    "destination": "Jardines del Turia",
+    "waypoints": [
+      {"lat": 39.4699, "lon": -0.3763},
+      {"lat": 39.4710, "lon": -0.3775},
+      {"lat": 39.4725, "lon": -0.3790},
+      {"lat": 39.4740, "lon": -0.3800},
+      {"lat": 39.4755, "lon": -0.3810},
+      {"lat": 39.4770, "lon": -0.3815}
+    ]
+  }
+}
