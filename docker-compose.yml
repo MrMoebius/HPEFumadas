@@ -24,7 +24,7 @@ services:
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USER:-admin}
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD:-bomberos2025}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD:-chumetrix26}
       - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-bomberos}
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-telemetria}
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN:-token-bomberos-dev}
@@ -66,6 +66,9 @@ services:
       - INFLUX_ORG=${INFLUX_ORG:-bomberos}
       - INFLUX_BUCKET=${INFLUX_BUCKET:-telemetria}
       - VEHICLE_ID=${VEHICLE_ID:-BOM-001}
+      - DB_PATH=/app/data/bomberos.db
+    volumes:
+      - ./data/sqlite:/app/data
     restart: unless-stopped
 
   api:

@@ -13,4 +13,6 @@ COPY config/ ./config/
 COPY core/ ./core/
 COPY ai/ ./ai/
 
+RUN mkdir -p /app/data
+
 CMD ["python", "-m", "core.twin_engine"]
