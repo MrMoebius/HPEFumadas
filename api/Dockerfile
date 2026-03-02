@@ -10,7 +10,12 @@ COPY api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY config/ ./config/
-COPY core/models/ ./core/models/
+COPY core/ ./core/
+COPY ai/ ./ai/
+COPY simulator/scenario_engine.py ./simulator/scenario_engine.py
+COPY simulator/__init__.py ./simulator/__init__.py
 COPY api/ ./api/
+
+RUN mkdir -p /app/data
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

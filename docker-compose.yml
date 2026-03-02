@@ -76,7 +76,7 @@ services:
       context: .
       dockerfile: api/Dockerfile
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${API_PORT:-8002}:8000"
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -89,6 +89,9 @@ services:
       - INFLUX_TOKEN=${INFLUX_TOKEN:-token-bomberos-dev}
       - INFLUX_ORG=${INFLUX_ORG:-bomberos}
       - INFLUX_BUCKET=${INFLUX_BUCKET:-telemetria}
+      - DB_PATH=/app/data/bomberos.db
+    volumes:
+      - ./data/sqlite:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
