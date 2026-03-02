@@ -21,6 +21,9 @@ data/influxdb/*
 # Docker
 *.log
 
+# Bitácora (solo local)
+BITACORA.md
+
 # OS
 .DS_Store
 Thumbs.db
