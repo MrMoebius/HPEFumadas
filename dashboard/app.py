@@ -149,7 +149,9 @@ with st.sidebar:
             "en_escena": "\U0001F534",
             "regreso_base": "\U0001F7E1",
         }
-        st.info(f"{icons.get(mission, '\u26AA')} Mision: **{mission.replace('_', ' ').upper()}**")
+        icon = icons.get(mission, "\u26AA")
+        label = mission.replace("_", " ").upper()
+        st.info(f"{icon} Mision: **{label}**")
         st.caption(f"Tick #{state.get('tick', '?')} | {state.get('timestamp', '')}")
 
     st.divider()
@@ -451,7 +453,7 @@ elif page == "Mapa":
     folium.Marker(
         [lat, lon],
         popup=f"BOM-001 | {mission} | {speed:.0f} km/h",
-        tooltip=f"BOM-001 — {mission.replace('_', ' ').upper()}",
+        tooltip="BOM-001 — " + mission.replace("_", " ").upper(),
         icon=folium.Icon(color=color, icon="fire-extinguisher", prefix="fa"),
     ).add_to(m)
 
