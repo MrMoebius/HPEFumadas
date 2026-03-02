@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Entorno
+.env
+
+# Datos persistentes (solo en local)
+data/sqlite/*.db
+data/influxdb/*
+!data/**/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

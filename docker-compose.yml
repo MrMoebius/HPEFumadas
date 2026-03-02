@@ -1,0 +1,116 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  influxdb:
+    image: influxdb:2-alpine
+    ports:
+      - "${INFLUX_PORT:-8086}:8086"
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USER:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD:-bomberos2025}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG:-bomberos}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET:-telemetria}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUX_TOKEN:-token-bomberos-dev}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  simulator:
+    build:
+      context: .
+      dockerfile: simulator/Dockerfile
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - VEHICLE_ID=${VEHICLE_ID:-BOM-001}
+      - TICK_INTERVAL=${TICK_INTERVAL:-2}
+    restart: unless-stopped
+
+  twin-engine:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-token-bomberos-dev}
+      - INFLUX_ORG=${INFLUX_ORG:-bomberos}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-telemetria}
+      - VEHICLE_ID=${VEHICLE_ID:-BOM-001}
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      twin-engine:
+        condition: service_started
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=${INFLUX_TOKEN:-token-bomberos-dev}
+      - INFLUX_ORG=${INFLUX_ORG:-bomberos}
+      - INFLUX_BUCKET=${INFLUX_BUCKET:-telemetria}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - API_URL=http://api:8000
+      - WS_URL=ws://api:8000
+    restart: unless-stopped
+
+networks:
+  default:
+    name: bomberos-net
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
