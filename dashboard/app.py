@@ -47,9 +47,9 @@ def api_get(path: str):
         return None
 
 
-def api_post(path: str, body: dict):
+def api_post(path: str, body: dict = None):
     try:
-        r = requests.post(f"{API_URL}{path}", json=body, timeout=10)
+        r = requests.post(f"{API_URL}{path}", json=body or {}, timeout=10)
         r.raise_for_status()
         return r.json()
     except Exception:
@@ -114,6 +114,30 @@ def gauge_rev(title, value, lo, hi, unit="", warn=None, crit=None):
     return fig
 
 
+# ── Severity helpers ────────────────────────────────────────────────────────
+
+SEVERITY_COLORS = {
+    "emergencia": "#c0392b",
+    "critica": "#e74c3c",
+    "advertencia": "#f39c12",
+    "informativa": "#3498db",
+    # Compat con severidades antiguas
+    "critical": "#e74c3c",
+    "warning": "#f39c12",
+    "info": "#3498db",
+}
+
+SEVERITY_ICONS = {
+    "emergencia": "\U0001F6A8",
+    "critica": "\U0001F534",
+    "advertencia": "\U0001F7E1",
+    "informativa": "\U0001F535",
+    "critical": "\U0001F534",
+    "warning": "\U0001F7E1",
+    "info": "\U0001F535",
+}
+
+
 # ── Fetch core data ────────────────────────────────────────────────────────
 
 state = api_get(f"/api/v1/twin/{VEHICLE_ID}/state")
@@ -162,12 +186,14 @@ with st.sidebar:
 
     # Navigation
     page = st.radio("Navegacion", [
+        "Centro de Mando",
         "Estado en Tiempo Real",
         "Alertas",
         "Telemetria",
         "Mapa",
         "Simulacion",
         "Predicciones",
+        "IA Avanzada",
     ], label_visibility="collapsed")
 
     st.divider()
@@ -206,10 +232,137 @@ if not state:
     st.stop()
 
 # ════════════════════════════════════════════════════════════════════════════
+#  CENTRO DE MANDO
+# ════════════════════════════════════════════════════════════════════════════
+
+if page == "Centro de Mando":
+    st.header("Centro de Mando")
+
+    col_timeline, col_alerts, col_chat = st.columns(3)
+
+    # ── Col 1: Linea de tiempo ──────────────────────────────────────────
+    with col_timeline:
+        st.subheader("Linea de Tiempo")
+        timeline = api_get(f"/api/v1/twin/{VEHICLE_ID}/timeline")
+        if timeline and timeline.get("count", 0) > 0:
+            for evt in timeline["events"][:20]:
+                ts = evt.get("timestamp", "")
+                if isinstance(ts, str) and len(ts) > 16:
+                    ts = ts[11:19]
+                if evt["type"] == "mission":
+                    icon_from = icons.get(evt.get("from", ""), "\u26AA")
+                    icon_to = icons.get(evt.get("to", ""), "\u26AA")
+                    st.markdown(
+                        f"`{ts}` {icon_from} -> {icon_to} "
+                        f"**{evt.get('from', '?')}** -> **{evt.get('to', '?')}**"
+                    )
+                elif evt["type"] == "alert":
+                    sev = evt.get("severity", "informativa")
+                    sev_icon = SEVERITY_ICONS.get(sev, "\U0001F535")
+                    st.markdown(
+                        f"`{ts}` {sev_icon} [{sev.upper()}] {evt.get('message', '')}"
+                    )
+        else:
+            st.info("Sin eventos aun")
+
+    # ── Col 2: Alertas activas ──────────────────────────────────────────
+    with col_alerts:
+        st.subheader("Alertas Activas")
+        if alerts_data and alerts_data.get("count", 0) > 0:
+            alerts_list = alerts_data["alerts"]
+
+            # Contadores por severidad
+            counts = {}
+            for a in alerts_list:
+                sev = a.get("severity", "informativa")
+                counts[sev] = counts.get(sev, 0) + 1
+
+            cols_sev = st.columns(len(counts)) if counts else []
+            for i, (sev, cnt) in enumerate(counts.items()):
+                color = SEVERITY_COLORS.get(sev, "#888")
+                cols_sev[i].markdown(
+                    f"<div style='text-align:center;padding:4px;background:{color}20;"
+                    f"border-radius:6px;border-left:3px solid {color}'>"
+                    f"<b>{cnt}</b><br><small>{sev.upper()}</small></div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+
+            # Lista de alertas con botones
+            for a in alerts_list:
+                sev = a.get("severity", "informativa")
+                sev_icon = SEVERITY_ICONS.get(sev, "\U0001F535")
+                msg = a.get("message", a.get("metric", "Sin detalle"))
+                aid = a.get("alert_id", "?")
+                status = a.get("status", "activa")
+
+                st.markdown(f"{sev_icon} **{msg}** `{status}`")
+
+                bc1, bc2, bc3 = st.columns(3)
+                with bc1:
+                    if st.button("ACK", key=f"ack_{aid}", type="primary"):
+                        api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/confirm")
+                        st.rerun()
+                with bc2:
+                    if st.button("ESC", key=f"esc_{aid}"):
+                        api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/escalate")
+                        st.rerun()
+                with bc3:
+                    if st.button("OFF", key=f"off_{aid}"):
+                        api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/dismiss")
+                        st.rerun()
+        else:
+            st.success("Sin alertas activas")
+
+    # ── Col 3: Chat ─────────────────────────────────────────────────────
+    with col_chat:
+        st.subheader("Comunicaciones")
+
+        chat_data = api_get(f"/api/v1/chat/{VEHICLE_ID}/messages")
+        if chat_data and chat_data.get("count", 0) > 0:
+            for msg in chat_data["messages"][-15:]:
+                ts = msg.get("timestamp", "")
+                if isinstance(ts, str) and len(ts) > 16:
+                    ts = ts[11:19]
+                sender = msg.get("sender", "?")
+                text = msg.get("message", "")
+                role = msg.get("role", "operador")
+                if role == "sistema":
+                    st.markdown(f"`{ts}` **[SIS]** {text}")
+                else:
+                    st.markdown(f"`{ts}` **{sender}:** {text}")
+        else:
+            st.caption("Sin mensajes")
+
+        # Formulario de envio
+        with st.form("chat_form", clear_on_submit=True):
+            chat_input = st.text_input("Mensaje", placeholder="Escribe un mensaje...")
+            chat_send = st.form_submit_button("Enviar")
+            if chat_send and chat_input:
+                api_post(f"/api/v1/chat/{VEHICLE_ID}/send", {
+                    "sender": "operador",
+                    "message": chat_input,
+                    "role": "operador",
+                })
+                st.rerun()
+
+    # ── Fila inferior: metricas clave ───────────────────────────────────
+    st.divider()
+    st.subheader("Metricas Clave")
+    km1, km2, km3, km4, km5, km6 = st.columns(6)
+    km1.metric("Motor", f"{state.get('engine_temp', 0):.0f} C")
+    km2.metric("Agua", f"{state.get('water_tank_level', 0):.0f} %")
+    km3.metric("Combustible", f"{state.get('fuel_level', 0):.0f} %")
+    km4.metric("Velocidad", f"{state.get('speed_kmh', 0):.0f} km/h")
+    km5.metric("Tripulacion", f"{state.get('crew_count', 0)}")
+    km6.metric("Bomba", f"{state.get('pump_pressure', 0):.0f} PSI")
+
+# ════════════════════════════════════════════════════════════════════════════
 #  ESTADO EN TIEMPO REAL
 # ════════════════════════════════════════════════════════════════════════════
 
-if page == "Estado en Tiempo Real":
+elif page == "Estado en Tiempo Real":
     st.header("Estado en Tiempo Real")
 
     # Row 1 — main gauges
@@ -304,15 +457,35 @@ elif page == "Alertas":
     with tab_act:
         if alerts_data and alerts_data.get("count", 0) > 0:
             for a in alerts_data["alerts"]:
-                sev = a.get("severity", "info")
+                sev = a.get("severity", "informativa")
                 msg = a.get("message", a.get("metric", "Sin detalle"))
                 cat = a.get("category", "alerta")
-                if sev == "critical":
-                    st.error(f"**{cat}** — {msg}")
-                elif sev == "warning":
-                    st.warning(f"**{cat}** — {msg}")
+                aid = a.get("alert_id", "?")
+                status = a.get("status", "activa")
+                sev_icon = SEVERITY_ICONS.get(sev, "\U0001F535")
+
+                if sev in ("critica", "emergencia", "critical"):
+                    st.error(f"{sev_icon} **{cat}** — {msg} `[{status}]`")
+                elif sev in ("advertencia", "warning"):
+                    st.warning(f"{sev_icon} **{cat}** — {msg} `[{status}]`")
                 else:
-                    st.info(f"**{cat}** — {msg}")
+                    st.info(f"{sev_icon} **{cat}** — {msg} `[{status}]`")
+
+                # Botones de accion
+                ac1, ac2, ac3, ac4 = st.columns([1, 1, 1, 3])
+                with ac1:
+                    if st.button("Confirmar", key=f"conf_{aid}"):
+                        api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/confirm")
+                        st.rerun()
+                with ac2:
+                    if st.button("Escalar", key=f"esc2_{aid}"):
+                        api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/escalate")
+                        st.rerun()
+                with ac3:
+                    if st.button("Descartar", key=f"dis_{aid}"):
+                        api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/dismiss")
+                        st.rerun()
+
                 with st.expander("Detalles"):
                     st.json(a)
         else:
@@ -322,11 +495,14 @@ elif page == "Alertas":
         hist = api_get(f"/api/v1/alerts/{VEHICLE_ID}/history")
         if hist and hist.get("count", 0) > 0:
             for a in hist["alerts"]:
-                sev = a.get("severity", "info")
-                icon = "\U0001F534" if sev == "critical" else "\U0001F7E1" if sev == "warning" else "\U0001F535"
+                sev = a.get("severity", "informativa")
+                sev_icon = SEVERITY_ICONS.get(sev, "\U0001F535")
                 cat = a.get("category", "")
                 msg = a.get("message", a.get("metric", ""))
-                st.markdown(f"{icon} **{cat}** — {msg}")
+                status = a.get("status", "activa")
+                esc_count = a.get("escalation_count", 0)
+                extra = f" (escalada x{esc_count})" if esc_count > 0 else ""
+                st.markdown(f"{sev_icon} **{cat}** — {msg} `[{status}]{extra}`")
         else:
             st.info("Sin historial de alertas")
 
@@ -882,6 +1058,208 @@ elif page == "Predicciones":
                 st.success("Sin recomendaciones de mantenimiento pendientes")
         else:
             st.info("Sin datos de mantenimiento")
+
+# ════════════════════════════════════════════════════════════════════════════
+#  IA AVANZADA
+# ════════════════════════════════════════════════════════════════════════════
+
+elif page == "IA Avanzada":
+    st.header("IA Avanzada")
+
+    tab_risk, tab_resources, tab_fleet = st.tabs([
+        "Mapa de Riesgo",
+        "Estimador de Recursos",
+        "Optimizacion de Flota",
+    ])
+
+    # ── Tab 1: Mapa de Riesgo ──────────────────────────────────────────
+    with tab_risk:
+        st.subheader("Zonas de Riesgo por Hora")
+        risk_hour = st.slider("Hora del dia", 0, 23, 14, key="risk_hour")
+        risk_vehicles = st.slider("Vehiculos a posicionar", 1, 6, 3, key="risk_vehicles")
+
+        risk_data = api_get(f"/api/v1/ai/{VEHICLE_ID}/risk-zones?hour={risk_hour}")
+        deploy_data = api_get(f"/api/v1/ai/{VEHICLE_ID}/deployment?hour={risk_hour}&vehicles={risk_vehicles}")
+
+        if risk_data and risk_data.get("risk_zones"):
+            zones = risk_data["risk_zones"]
+
+            # Metricas
+            rm1, rm2, rm3 = st.columns(3)
+            rm1.metric("Zonas detectadas", len(zones))
+            rm2.metric("Metodo", risk_data.get("method", "?"))
+            max_risk = max(z["risk"] for z in zones) if zones else 0
+            rm3.metric("Riesgo maximo", f"{max_risk:.0%}")
+
+            # Mapa Folium
+            m_risk = folium.Map(location=[39.4699, -0.3763], zoom_start=12)
+
+            # Circulos de riesgo
+            for z in zones:
+                risk_val = z.get("risk", 0)
+                if risk_val > 0.6:
+                    color = "#e74c3c"
+                elif risk_val > 0.3:
+                    color = "#f39c12"
+                else:
+                    color = "#2ecc71"
+
+                folium.CircleMarker(
+                    [z["lat"], z["lon"]],
+                    radius=int(risk_val * 25) + 5,
+                    color=color,
+                    fill=True,
+                    fill_color=color,
+                    fill_opacity=0.35,
+                    weight=2,
+                    popup=f"{z['zone_name']}: riesgo {risk_val:.0%}",
+                    tooltip=f"{z['zone_name']} ({risk_val:.0%})",
+                ).add_to(m_risk)
+
+            # Markers de posiciones recomendadas
+            if deploy_data and deploy_data.get("positions"):
+                for pos in deploy_data["positions"]:
+                    folium.Marker(
+                        [pos["lat"], pos["lon"]],
+                        popup=f"Vehiculo {pos['vehicle_slot']}: {pos['zone_name']} (prioridad: {pos['priority']})",
+                        tooltip=f"V{pos['vehicle_slot']} - {pos['zone_name']}",
+                        icon=folium.Icon(color="blue", icon="truck", prefix="fa"),
+                    ).add_to(m_risk)
+
+            st_folium(m_risk, width=None, height=500, returned_objects=[])
+
+            # Tabla de zonas
+            with st.expander("Detalle de zonas de riesgo"):
+                for z in zones:
+                    risk_val = z.get("risk", 0)
+                    if risk_val > 0.6:
+                        st.error(f"**{z['zone_name']}** — Riesgo: {risk_val:.0%}")
+                    elif risk_val > 0.3:
+                        st.warning(f"**{z['zone_name']}** — Riesgo: {risk_val:.0%}")
+                    else:
+                        st.info(f"**{z['zone_name']}** — Riesgo: {risk_val:.0%}")
+        else:
+            st.info("Sin datos de riesgo disponibles")
+
+    # ── Tab 2: Estimador de Recursos ───────────────────────────────────
+    with tab_resources:
+        st.subheader("Estimacion de Recursos por Incidente")
+
+        types_data = api_get(f"/api/v1/ai/{VEHICLE_ID}/estimate-resources/types")
+        if types_data:
+            type_list = types_data.get("types", [])
+            type_names = [t["type"] for t in type_list]
+            type_descriptions = {t["type"]: t["description"] for t in type_list}
+
+            rc1, rc2, rc3 = st.columns(3)
+            with rc1:
+                selected_type = st.selectbox(
+                    "Tipo de incidente", type_names,
+                    format_func=lambda x: x.replace("_", " ").title(),
+                )
+            with rc2:
+                selected_severity = st.selectbox("Severidad", ["baja", "media", "alta"], index=1)
+            with rc3:
+                selected_area = st.number_input("Area afectada (m2)", min_value=10, max_value=10000, value=200)
+
+            st.caption(type_descriptions.get(selected_type, ""))
+
+            if st.button("Estimar Recursos", type="primary"):
+                est_result = api_post(f"/api/v1/ai/{VEHICLE_ID}/estimate-resources", {
+                    "type": selected_type,
+                    "severity": selected_severity,
+                    "area_m2": selected_area,
+                })
+
+                if est_result and "resources" in est_result:
+                    res = est_result["resources"]
+                    st.success(f"Estimacion completada (metodo: {est_result.get('method', '?')})")
+
+                    ec1, ec2, ec3, ec4, ec5 = st.columns(5)
+                    ec1.metric("Bomberos", res.get("bomberos", 0))
+                    ec2.metric("Agua (L)", f"{res.get('agua_litros', 0):,}")
+                    ec3.metric("Espuma (L)", f"{res.get('espuma_litros', 0):,}")
+                    ec4.metric("Vehiculos", res.get("vehiculos", 0))
+                    ec5.metric("Tiempo (min)", res.get("tiempo_min", 0))
+
+                    with st.expander("JSON completo"):
+                        st.json(est_result)
+                elif est_result and "error" in est_result:
+                    st.error(est_result["error"])
+                else:
+                    st.error("Error en la estimacion")
+        else:
+            st.error("No se pueden cargar tipos de incidente")
+
+    # ── Tab 3: Optimizacion de Flota ───────────────────────────────────
+    with tab_fleet:
+        st.subheader("Optimizacion de Asignaciones")
+
+        fc1, fc2 = st.columns(2)
+
+        with fc1:
+            st.markdown("#### Asignacion Optima")
+            opt_result = api_get("/api/v1/ai/fleet/optimize")
+            if opt_result and opt_result.get("assignments"):
+                assignments = opt_result["assignments"]
+
+                # Metricas resumen
+                om1, om2, om3 = st.columns(3)
+                om1.metric("Asignaciones", opt_result.get("total_assignments", 0))
+                om2.metric("Distancia total", f"{opt_result.get('total_distance_km', 0):.1f} km")
+                om3.metric("ETA promedio", f"{opt_result.get('avg_eta_min', 0):.1f} min")
+
+                st.caption(f"Metodo: {opt_result.get('method', '?')}")
+
+                # Tabla de asignaciones
+                for a in assignments:
+                    priority = a.get("priority", "media")
+                    if priority == "alta":
+                        st.error(
+                            f"**{a['vehicle_id']}** ({a['vehicle_type']}) "
+                            f"-> {a['emergency_id']} | "
+                            f"{a['distance_km']} km | ETA: {a['eta_min']} min"
+                        )
+                    else:
+                        st.warning(
+                            f"**{a['vehicle_id']}** ({a['vehicle_type']}) "
+                            f"-> {a['emergency_id']} | "
+                            f"{a['distance_km']} km | ETA: {a['eta_min']} min"
+                        )
+            else:
+                st.info("Sin asignaciones pendientes")
+
+        with fc2:
+            st.markdown("#### Cobertura de Flota")
+            cov_result = api_get("/api/v1/ai/fleet/coverage")
+            if cov_result:
+                score = cov_result.get("score", 0)
+
+                # Score grande
+                if score >= 0.8:
+                    st.success(f"Score de cobertura: **{score:.0%}**")
+                elif score >= 0.5:
+                    st.warning(f"Score de cobertura: **{score:.0%}**")
+                else:
+                    st.error(f"Score de cobertura: **{score:.0%}**")
+
+                cm1, cm2 = st.columns(2)
+                cm1.metric("Zonas cubiertas", f"{cov_result.get('covered_zones', 0)}/{cov_result.get('total_zones', 0)}")
+                cm2.metric("Radio cobertura", f"{cov_result.get('coverage_radius_km', 3)} km")
+
+                # Detalle por zona
+                details = cov_result.get("details", [])
+                if details:
+                    for d in details:
+                        status = "Cubierta" if d["covered"] else "Sin cobertura"
+                        icon = "OK" if d["covered"] else "!!"
+                        st.markdown(
+                            f"[{icon}] **{d['zone_name']}** — "
+                            f"Vehiculo mas cercano: {d['nearest_vehicle']} "
+                            f"({d['distance_km']} km) — {status}"
+                        )
+            else:
+                st.info("Sin datos de cobertura")
 
 # ── Footer ──────────────────────────────────────────────────────────────────
 

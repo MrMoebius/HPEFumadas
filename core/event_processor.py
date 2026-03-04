@@ -6,7 +6,7 @@ y distribuye a State Manager, Rule Engine y módulos de IA.
 import json
 import paho.mqtt.client as mqtt
 from loguru import logger
-from config.settings import MQTT_HOST, MQTT_PORT, TOPIC_TELEMETRY, VEHICLE_ID
+from config.settings import MQTT_HOST, MQTT_PORT, TOPIC_TELEMETRY, TOPIC_ALERTS, VEHICLE_ID
 
 
 class EventProcessor:
@@ -55,7 +55,10 @@ class EventProcessor:
         for alert in alerts:
             self.state_manager.add_alert(alert)
 
-        # 3. Detección de anomalías (cada 5 ticks para no sobrecargar)
+        # 3. Auto-escalación de alertas sin confirmar
+        self._check_escalation()
+
+        # 4. Detección de anomalías (cada 5 ticks para no sobrecargar)
         if self._tick_count % 5 == 0:
             anomaly_result = self.anomaly_detector.evaluate(telemetry)
             if anomaly_result["is_anomaly"]:
@@ -67,14 +70,32 @@ class EventProcessor:
                 risk = anomaly_result["score"] * 0.7 + len(self.state_manager.alerts) * 0.1
                 self.state_manager.update_risk_score(risk)
 
-        # 4. Asistente de decisiones (cada 5 ticks)
+        # 5. Asistente de decisiones (cada 5 ticks)
         if self._tick_count % 5 == 0:
             decisions = self.decision_assistant.evaluate(telemetry)
             for decision in decisions:
                 logger.info(f"DECISIÓN: {decision}")
 
-        # 5. Limpiar alertas resueltas
+        # 6. Limpiar alertas resueltas
         self._check_resolved_alerts(telemetry)
+
+    def _check_escalation(self):
+        """Escala alertas sin confirmar tras timeout."""
+        for alert in list(self.state_manager.alerts):
+            if alert.needs_escalation():
+                prev = alert.severity
+                if alert.escalate():
+                    self.state_manager.escalate_alert(alert)
+                    logger.warning(
+                        f"ESCALACIÓN [{prev} → {alert.severity}] "
+                        f"{alert.message} ({alert.metric})"
+                    )
+                    # Re-publicar por MQTT
+                    self.client.publish(
+                        TOPIC_ALERTS,
+                        json.dumps(alert.model_dump(mode="json")),
+                        qos=1,
+                    )
 
     def _check_resolved_alerts(self, telemetry: dict):
         """Limpia alertas cuya métrica volvió a rango normal."""

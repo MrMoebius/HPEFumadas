@@ -136,6 +136,9 @@ class VehicleSimulator:
                         f"Comando force_emergency ignorado — "
                         f"vehículo en estado '{self.mission_status}'"
                     )
+            elif cmd in ("confirm_alert", "dismiss_alert", "escalate_alert"):
+                aid = payload.get("alert_id", "?")
+                logger.info(f"Comando recibido: {cmd} (alert_id={aid})")
         except Exception as e:
             logger.error(f"Error procesando comando: {e}")
 

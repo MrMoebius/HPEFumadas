@@ -54,3 +54,42 @@ def get_health(vehicle_id: str):
         "mission_status": state.get("mission_status", "unknown"),
         "anomalies": state.get("anomalies", []),
     }
+
+
+@router.get("/{vehicle_id}/timeline")
+def get_timeline(vehicle_id: str):
+    """Línea de tiempo de eventos de misión y alertas."""
+    mission_events = shared_state.get_mission_timeline()
+    alerts = shared_state.get_alerts()
+
+    # Combinar eventos de misión y alertas en una timeline unificada
+    timeline = []
+
+    for evt in mission_events:
+        timeline.append({
+            "type": "mission",
+            "event": evt.get("type", "transition"),
+            "from": evt.get("from", ""),
+            "to": evt.get("to", ""),
+            "timestamp": evt.get("timestamp", ""),
+            "tick": evt.get("tick", 0),
+        })
+
+    for alert in alerts:
+        timeline.append({
+            "type": "alert",
+            "severity": alert.get("severity", "informativa"),
+            "message": alert.get("message", ""),
+            "metric": alert.get("metric", ""),
+            "status": alert.get("status", "activa"),
+            "timestamp": alert.get("timestamp", ""),
+        })
+
+    # Ordenar por timestamp
+    timeline.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+    return {
+        "vehicle_id": vehicle_id,
+        "count": len(timeline),
+        "events": timeline,
+    }

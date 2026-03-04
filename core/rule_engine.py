@@ -12,7 +12,7 @@ RULES = [
     {
         "metric": "engine_temp",
         "condition": lambda v: v > 105,
-        "severity": "warning",
+        "severity": "advertencia",
         "category": "mecanica",
         "message": "Temperatura del motor elevada",
         "threshold": 105,
@@ -21,7 +21,7 @@ RULES = [
     {
         "metric": "engine_temp",
         "condition": lambda v: v > 115,
-        "severity": "critical",
+        "severity": "critica",
         "category": "mecanica",
         "message": "Sobrecalentamiento del motor",
         "threshold": 115,
@@ -31,7 +31,7 @@ RULES = [
     {
         "metric": "pump_pressure",
         "condition": lambda v, m: v < 80 and v > 0 and m.get("mission_status") == "en_escena",
-        "severity": "warning",
+        "severity": "advertencia",
         "category": "equipamiento",
         "message": "Presión de bomba baja",
         "threshold": 80,
@@ -41,7 +41,7 @@ RULES = [
     {
         "metric": "pump_pressure",
         "condition": lambda v, m: v < 30 and v > 0 and m.get("mission_status") == "en_escena",
-        "severity": "critical",
+        "severity": "critica",
         "category": "equipamiento",
         "message": "Fallo de bomba de agua",
         "threshold": 30,
@@ -52,7 +52,7 @@ RULES = [
     {
         "metric": "water_tank_level",
         "condition": lambda v, m: v < 20 and m.get("mission_status") == "en_escena",
-        "severity": "warning",
+        "severity": "advertencia",
         "category": "equipamiento",
         "message": "Nivel de agua bajo",
         "threshold": 20,
@@ -62,7 +62,7 @@ RULES = [
     {
         "metric": "water_tank_level",
         "condition": lambda v, m: v < 15 and m.get("mission_status") == "en_escena",
-        "severity": "critical",
+        "severity": "critica",
         "category": "equipamiento",
         "message": "Agua crítica en incendio activo",
         "threshold": 15,
@@ -73,7 +73,7 @@ RULES = [
     {
         "metric": "foam_tank_level",
         "condition": lambda v: v < 20,
-        "severity": "warning",
+        "severity": "advertencia",
         "category": "equipamiento",
         "message": "Nivel de espuma bajo",
         "threshold": 20,
@@ -83,8 +83,8 @@ RULES = [
     {
         "metric": "hydraulic_pressure",
         "condition": lambda v, m: v < 100 and m.get("ladder_status") == "extended",
-        "severity": "warning",
-        "category": "equipamiento",
+        "severity": "advertencia",
+        "category": "seguridad",
         "message": "Presión hidráulica descendiendo",
         "threshold": 100,
         "action": "No desplegar más la escalera",
@@ -93,8 +93,8 @@ RULES = [
     {
         "metric": "hydraulic_pressure",
         "condition": lambda v, m: v < 60 and m.get("ladder_status") == "extended",
-        "severity": "critical",
-        "category": "equipamiento",
+        "severity": "critica",
+        "category": "seguridad",
         "message": "Presión hidráulica baja — escalera inestable",
         "threshold": 60,
         "action": "Retracción manual, no desplegar más",
@@ -104,7 +104,7 @@ RULES = [
     {
         "metric": "battery_voltage",
         "condition": lambda v: v < 11.8,
-        "severity": "warning",
+        "severity": "advertencia",
         "category": "mecanica",
         "message": "Voltaje de batería bajo",
         "threshold": 11.8,
@@ -113,7 +113,7 @@ RULES = [
     {
         "metric": "battery_voltage",
         "condition": lambda v: v < 11.0,
-        "severity": "critical",
+        "severity": "critica",
         "category": "mecanica",
         "message": "Fallo eléctrico inminente",
         "threshold": 11.0,
@@ -123,11 +123,22 @@ RULES = [
     {
         "metric": "fuel_level",
         "condition": lambda v: v < 15,
-        "severity": "warning",
+        "severity": "advertencia",
         "category": "operativa",
         "message": "Combustible bajo",
         "threshold": 15,
         "action": "Planificar repostaje tras misión actual",
+    },
+    # Tripulación insuficiente
+    {
+        "metric": "crew_count",
+        "condition": lambda v, m: v < 4 and m.get("mission_status") == "en_escena",
+        "severity": "critica",
+        "category": "seguridad",
+        "message": "Tripulación insuficiente en escena",
+        "threshold": 4,
+        "action": "Solicitar refuerzos de personal, limitar operaciones",
+        "needs_context": True,
     },
 ]
 
@@ -161,6 +172,7 @@ class RuleEngine:
                 alert = Alert(
                     vehicle_id=vehicle_id,
                     severity=rule["severity"],
+                    original_severity=rule["severity"],
                     category=rule["category"],
                     message=rule["message"],
                     metric=metric,

@@ -21,6 +21,8 @@ from api.routes.predictions import router as predictions_router
 from api.routes.ecosystem import router as ecosystem_router
 from api.routes.geo import router as geo_router
 from api.websocket import router as ws_router
+from api.routes.protocols import router as protocols_router
+from api.routes.ai_advanced import router as ai_advanced_router
 
 
 @asynccontextmanager
@@ -56,6 +58,8 @@ app.include_router(predictions_router, prefix="/api/v1/predict", tags=["Predicci
 app.include_router(ecosystem_router, prefix="/api/v1/ecosystem", tags=["Ecosistema"])
 app.include_router(geo_router, prefix="/api/v1/geo", tags=["Cartografía"])
 app.include_router(ws_router, prefix="/api/v1", tags=["WebSocket"])
+app.include_router(protocols_router, prefix="/api/v1/protocols", tags=["Protocolos"])
+app.include_router(ai_advanced_router, prefix="/api/v1/ai", tags=["IA Avanzada"])
 
 
 @app.get("/health")
