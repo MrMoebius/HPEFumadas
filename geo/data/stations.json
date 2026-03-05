@@ -5,7 +5,9 @@
     "lat": 39.4699,
     "lon": -0.3763,
     "address": "Plaza del Ayuntamiento, Valencia",
-    "type": "central"
+    "type": "central",
+    "city": "Valencia",
+    "is_base": true
   },
   {
     "id": "EST002",
@@ -13,7 +15,8 @@
     "lat": 39.4835,
     "lon": -0.3960,
     "address": "Av. de las Cortes Valencianas, Valencia",
-    "type": "distrito"
+    "type": "distrito",
+    "city": "Valencia"
   },
   {
     "id": "EST003",
@@ -21,7 +24,8 @@
     "lat": 39.4530,
     "lon": -0.3790,
     "address": "Calle San José de Calasanz, Valencia",
-    "type": "distrito"
+    "type": "distrito",
+    "city": "Valencia"
   },
   {
     "id": "EST004",
@@ -29,7 +33,8 @@
     "lat": 39.4570,
     "lon": -0.3380,
     "address": "Av. del Puerto, Valencia",
-    "type": "distrito"
+    "type": "distrito",
+    "city": "Valencia"
   },
   {
     "id": "EST005",
@@ -37,6 +42,7 @@
     "lat": 39.4920,
     "lon": -0.3580,
     "address": "Calle Emilio Baró, Valencia",
-    "type": "distrito"
+    "type": "distrito",
+    "city": "Valencia"
   }
 ]

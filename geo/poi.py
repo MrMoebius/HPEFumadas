@@ -1,6 +1,6 @@
 """
 Carga POIs (Points of Interest) desde archivos JSON estáticos.
-Hidrantes y estaciones de bomberos de Valencia.
+Hidrantes y estaciones de bomberos, preparados para múltiples ciudades.
 """
 
 import json
@@ -21,10 +21,20 @@ def _load_json(filename: str) -> list[dict]:
 
 
 def load_hydrants() -> list[dict]:
-    """Carga posiciones de hidrantes de Valencia."""
+    """Carga posiciones de hidrantes (por ahora Valencia)."""
     return _load_json("hydrants.json")
 
 
 def load_stations() -> list[dict]:
-    """Carga estaciones de bomberos de Valencia."""
+    """Carga estaciones de bomberos (por ahora Valencia)."""
     return _load_json("stations.json")
+
+
+def list_cities() -> list[str]:
+    """Lista de ciudades con parques de bomberos definidos."""
+    stations = load_stations()
+    cities = {s.get("city", "Valencia") for s in stations}
+    # Asegurar al menos Valencia
+    if not cities:
+        cities = {"Valencia"}
+    return sorted(cities)

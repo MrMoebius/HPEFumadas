@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from api.state import shared_state
 from config.settings import TOPIC_COMMANDS
-from geo.poi import load_hydrants, load_stations
+from geo.poi import load_hydrants, load_stations, list_cities
 from geo.traffic import SimulatedTrafficProvider, get_zones_with_congestion
 
 router = APIRouter()
@@ -26,17 +26,28 @@ def get_active_route(vehicle_id: str):
 
 
 @router.get("/poi/hydrants")
-def get_hydrants():
-    """Posiciones de hidrantes de Valencia."""
+def get_hydrants(city: Optional[str] = None):
+    """Posiciones de hidrantes, filtrables por ciudad."""
     hydrants = load_hydrants()
+    if city:
+        hydrants = [h for h in hydrants if h.get("city", "Valencia") == city]
     return {"count": len(hydrants), "hydrants": hydrants}
 
 
 @router.get("/poi/stations")
-def get_stations():
-    """Estaciones de bomberos de Valencia."""
+def get_stations(city: Optional[str] = None):
+    """Estaciones de bomberos, filtrables por ciudad."""
     stations = load_stations()
+    if city:
+        stations = [s for s in stations if s.get("city", "Valencia") == city]
     return {"count": len(stations), "stations": stations}
+
+
+@router.get("/cities")
+def get_cities():
+    """Lista de ciudades soportadas para POIs."""
+    cities = list_cities()
+    return {"count": len(cities), "cities": cities}
 
 
 @router.get("/traffic/current")

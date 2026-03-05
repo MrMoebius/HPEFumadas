@@ -264,17 +264,29 @@ with st.sidebar:
             label += " · SILENCIADAS"
         st.error(f"\U0001F514 {label}")
 
+    # City selector
+    cities_resp = api_get("/api/v1/geo/cities")
+    cities = cities_resp.get("cities", ["Valencia"]) if cities_resp else ["Valencia"]
+    if "city" not in st.session_state:
+        st.session_state["city"] = cities[0]
+    city = st.selectbox("Ciudad", cities, index=cities.index(st.session_state["city"]) if st.session_state["city"] in cities else 0)
+    st.session_state["city"] = city
+
     # Navigation
-    page = st.radio("Navegacion", [
-        "Centro de Mando",
-        "Estado en Tiempo Real",
-        "Alertas",
-        "Telemetria",
-        "Mapa",
-        "Simulacion",
-        "Predicciones",
-        "IA Avanzada",
-    ], label_visibility="collapsed")
+    page = st.radio(
+        "Navegacion",
+        [
+            "Centro de Mando",
+            "Estado en Tiempo Real",
+            "Alertas",
+            "Telemetria",
+            "Mapa",
+            "Simulacion",
+            "Predicciones",
+            "IA Avanzada",
+        ],
+        label_visibility="collapsed",
+    )
 
     st.divider()
 
@@ -1086,9 +1098,14 @@ elif page == "Mapa":
             """
             m.get_root().html.add_child(folium.Element(legend_html))
 
+    current_city = st.session_state.get("city")
+
     # Hydrants layer
     if show_hydrants:
-        hydrants_resp = api_get("/api/v1/geo/poi/hydrants")
+        if current_city:
+            hydrants_resp = api_get(f"/api/v1/geo/poi/hydrants?city={current_city}")
+        else:
+            hydrants_resp = api_get("/api/v1/geo/poi/hydrants")
         if hydrants_resp:
             for h in hydrants_resp.get("hydrants", []):
                 folium.CircleMarker(
@@ -1104,7 +1121,10 @@ elif page == "Mapa":
 
     # Fire stations layer
     if show_stations:
-        stations_resp = api_get("/api/v1/geo/poi/stations")
+        if current_city:
+            stations_resp = api_get(f"/api/v1/geo/poi/stations?city={current_city}")
+        else:
+            stations_resp = api_get("/api/v1/geo/poi/stations")
         if stations_resp:
             for s in stations_resp.get("stations", []):
                 folium.Marker(

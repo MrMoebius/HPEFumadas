@@ -69,6 +69,8 @@ class VehicleSimulator:
         self._force_emergency = False
         self._paused = False
         self._speed_factor = 1.0
+        self._paused = False
+        self._speed_factor = 1.0
 
         # MQTT
         self.client = mqtt.Client(client_id=f"sim-{self.vehicle_id}")
@@ -311,9 +313,12 @@ class VehicleSimulator:
                 self.hydraulic_pressure = 150.0 + random.uniform(-5, 5)
 
         elif self.mission_status == "disponible":
-            # Recargar al volver a base
+            # Recargar al volver a base (agua, espuma, combustible) y pequeñas reparaciones
             self.water_tank_level = min(100, self.water_tank_level + 2.0)
             self.foam_tank_level = min(100, self.foam_tank_level + 1.0)
+            self.fuel_level = min(100, self.fuel_level + 1.0)
+            # Reparacion ligera de frenos
+            self.brake_wear = max(0.0, self.brake_wear - 0.05)
             self.pump_pressure = 0.0
             self.hose_deployed = False
             if self.ladder_status == "extended":
