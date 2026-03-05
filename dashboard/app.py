@@ -9,10 +9,17 @@ from streamlit_folium import st_folium
 from streamlit_autorefresh import st_autorefresh
 from datetime import datetime
 
-# ── Config ──────────────────────────────────────────────────────────────────
+# ── Config / Branding ───────────────────────────────────────────────────────
 
 API_URL = os.getenv("API_URL", "http://localhost:8002")
 VEHICLE_ID = os.getenv("VEHICLE_ID", "BOM-001")
+
+FIRE_RED = "#e74c3c"
+FIRE_ORANGE = "#e67e22"
+FIRE_YELLOW = "#f1c40f"
+FIRE_BLUE = "#2980b9"
+FIRE_DARK = "#111827"
+FIRE_LIGHT = "#f9fafb"
 
 st.set_page_config(
     page_title=f"Gemelo Digital — {VEHICLE_ID}",
@@ -21,17 +28,55 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── Tema (oscuro / claro) ──────────────────────────────────────────────────
+
+if "theme_mode" not in st.session_state:
+    st.session_state["theme_mode"] = "dark"
+
+theme_mode = st.session_state["theme_mode"]
+is_dark = theme_mode == "dark"
+
+bg_color = FIRE_DARK if is_dark else FIRE_LIGHT
+card_bg = "#111827" if is_dark else "#ffffff"
+card_border = FIRE_RED if is_dark else FIRE_BLUE
+text_color = "#f9fafb" if is_dark else "#111827"
+muted_text = "#9ca3af" if is_dark else "#6b7280"
+
 # ── CSS ─────────────────────────────────────────────────────────────────────
 
-st.markdown("""
+st.markdown(f"""
 <style>
-    [data-testid="stMetric"] {
-        background: rgba(28, 131, 225, 0.1);
-        border-radius: 8px;
+    .block-container {{
+        padding-top: 1.5rem;
+        padding-bottom: 0.5rem;
+    }}
+    body {{
+        background-color: {bg_color};
+        color: {text_color};
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    [data-testid="stMetric"] {{
+        background: rgba(37, 99, 235, 0.10);
+        border-radius: 10px;
         padding: 12px 16px;
-        border-left: 4px solid #3498db;
-    }
-    .block-container { padding-top: 1.5rem; }
+        border-left: 4px solid {FIRE_BLUE};
+    }}
+    .alert-card {{
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+        border-left: 4px solid {card_border};
+        background: {card_bg};
+        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.45);
+    }}
+    .timeline-dot {{
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        display: inline-block;
+        margin-right: 6px;
+        border: 2px solid {FIRE_YELLOW};
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -149,6 +194,17 @@ alerts_data = api_get(f"/api/v1/alerts/{VEHICLE_ID}")
 with st.sidebar:
     st.markdown("## \U0001F692 BOM-001")
     st.caption("Gemelo Digital — Camion de Bomberos")
+    # Tema
+    theme_choice = st.radio(
+        "Tema",
+        ["Modo oscuro", "Modo claro"],
+        index=0 if is_dark else 1,
+        key="theme_selector",
+    )
+    new_mode = "dark" if theme_choice == "Modo oscuro" else "light"
+    if new_mode != st.session_state["theme_mode"]:
+        st.session_state["theme_mode"] = new_mode
+        st.rerun()
     st.divider()
 
     # Health
@@ -182,7 +238,16 @@ with st.sidebar:
 
     # Alert count
     if alerts_data and alerts_data.get("count", 0) > 0:
-        st.error(f"\U0001F514 {alerts_data['count']} alerta(s) activa(s)")
+        total_alerts = alerts_data["count"]
+        crit_count = 0
+        for a in alerts_data.get("alerts", []):
+            sev = a.get("severity", "informativa")
+            if sev in ("emergencia", "critica", "critical"):
+                crit_count += 1
+        label = f"{total_alerts} alerta(s) activa(s)"
+        if crit_count:
+            label += f" | {crit_count} critica(s)"
+        st.error(f"\U0001F514 {label}")
 
     # Navigation
     page = st.radio("Navegacion", [
@@ -230,6 +295,60 @@ if not state:
     st.warning("Esperando datos de telemetria del vehiculo...")
     st.info(f"API: {API_URL}")
     st.stop()
+
+# ── Header global ───────────────────────────────────────────────────────────
+
+severity_order = ["emergencia", "critica", "critical", "advertencia", "warning", "informativa", "info"]
+top_severity = None
+if alerts_data and alerts_data.get("alerts"):
+    for sev in severity_order:
+        if any(a.get("severity") == sev for a in alerts_data["alerts"]):
+            top_severity = sev
+            break
+
+mission = state.get("mission_status", "disponible")
+mission_labels = {
+    "disponible": "DISPONIBLE",
+    "en_ruta": "EN RUTA",
+    "en_escena": "EN ESCENA",
+    "regreso_base": "REGRESO A BASE",
+}
+mission_label = mission_labels.get(mission, mission.replace("_", " ").upper())
+
+mission_ticks = state.get("mission_ticks", state.get("tick", 0) or 0)
+mission_seconds = int(mission_ticks * 2)
+mission_min = mission_seconds // 60
+mission_sec = mission_seconds % 60
+
+header = st.container()
+with header:
+    h1, h2, h3 = st.columns([2, 2, 2])
+    with h1:
+        st.markdown(
+            f"### \U0001F692 Gemelo Digital — **{VEHICLE_ID}**",
+        )
+        st.caption("Centro de mando operacional · Ciudad de Valencia")
+    with h2:
+        icons = {
+            "disponible": "\U0001F7E2",
+            "en_ruta": "\U0001F535",
+            "en_escena": "\U0001F534",
+            "regreso_base": "\U0001F7E1",
+        }
+        icon = icons.get(mission, "\u26AA")
+        st.markdown(f"**Estado mision:** {icon} {mission_label}")
+        st.caption(f"Tick actual: {state.get('tick', '?')} · {state.get('timestamp', '')}")
+    with h3:
+        sev_icon = ""
+        if top_severity:
+            sev_icon = SEVERITY_ICONS.get(top_severity, "")
+        st.markdown(
+            f"**Tiempo de mision:** {mission_min}m {mission_sec:02d}s"
+        )
+        if top_severity:
+            st.caption(f"Severidad actual: {sev_icon} {top_severity.upper()}")
+        else:
+            st.caption("Severidad actual: SIN ALERTAS")
 
 # ════════════════════════════════════════════════════════════════════════════
 #  CENTRO DE MANDO
@@ -452,7 +571,20 @@ elif page == "Estado en Tiempo Real":
 elif page == "Alertas":
     st.header("Alertas y Anomalias")
 
-    tab_act, tab_hist, tab_anom = st.tabs(["Activas", "Historico", "Anomalias"])
+    active_total = alerts_data.get("count", 0) if alerts_data else 0
+    active_list = alerts_data.get("alerts", []) if alerts_data else []
+    crit_count = sum(
+        1 for a in active_list
+        if a.get("severity") in ("emergencia", "critica", "critical")
+    )
+    tab_labels = [
+        f"Activas ({crit_count} criticas / {active_total} total)"
+        if active_total else "Activas",
+        "Historico",
+        "Anomalias",
+    ]
+
+    tab_act, tab_hist, tab_anom = st.tabs(tab_labels)
 
     with tab_act:
         if alerts_data and alerts_data.get("count", 0) > 0:
@@ -463,13 +595,27 @@ elif page == "Alertas":
                 aid = a.get("alert_id", "?")
                 status = a.get("status", "activa")
                 sev_icon = SEVERITY_ICONS.get(sev, "\U0001F535")
+                color = SEVERITY_COLORS.get(sev, "#4b5563")
 
-                if sev in ("critica", "emergencia", "critical"):
-                    st.error(f"{sev_icon} **{cat}** — {msg} `[{status}]`")
-                elif sev in ("advertencia", "warning"):
-                    st.warning(f"{sev_icon} **{cat}** — {msg} `[{status}]`")
-                else:
-                    st.info(f"{sev_icon} **{cat}** — {msg} `[{status}]`")
+                card_html = f"""
+                <div class="alert-card" style="border-left-color:{color};">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <span style="font-size:18px;margin-right:6px;">{sev_icon}</span>
+                            <strong>{cat}</strong>
+                            <span style="color:{muted_text};font-size:12px;margin-left:4px;">
+                                [{status.upper()}]
+                            </span>
+                        </div>
+                        <span style="background:{color}33;color:{color};font-size:11px;
+                                     padding:2px 8px;border-radius:999px;text-transform:uppercase;">
+                            {sev}
+                        </span>
+                    </div>
+                    <div style="margin-top:4px;font-size:13px;">{msg}</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
 
                 # Botones de accion
                 ac1, ac2, ac3, ac4 = st.columns([1, 1, 1, 3])
@@ -559,10 +705,33 @@ elif page == "Telemetria":
             fig = go.Figure()
             for metric in selected:
                 values = [d.get(metric, 0) for d in data]
+                nice_name = metric.replace("_", " ").title()
                 fig.add_trace(go.Scatter(
-                    x=ticks, y=values, name=metric.replace("_", " ").title(),
+                    x=ticks, y=values, name=nice_name,
                     mode="lines",
                 ))
+
+            # Umbrales de zona peligrosa
+            thresholds = {
+                "engine_temp": {"crit": 115, "label": "Motor caliente 115°C"},
+                "pump_pressure": {"crit": 30, "label": "Baja presion bomba 30 PSI"},
+                "hydraulic_pressure": {"crit": 60, "label": "Baja presion hidraulica 60 PSI"},
+                "water_tank_level": {"crit": 10, "label": "Agua <10%"},
+                "foam_tank_level": {"crit": 10, "label": "Espuma <10%"},
+                "fuel_level": {"crit": 15, "label": "Combustible <15%"},
+                "battery_voltage": {"crit": 11.5, "label": "Bateria <11.5V"},
+            }
+            for metric, info in thresholds.items():
+                if metric in selected:
+                    fig.add_hline(
+                        y=info["crit"],
+                        line_dash="dot",
+                        line_color=FIRE_RED,
+                        annotation_text=info["label"],
+                        annotation_position="top left",
+                        opacity=0.7,
+                    )
+
             fig.update_layout(
                 height=420,
                 xaxis_title="Ticks",
@@ -650,7 +819,22 @@ elif page == "Mapa":
     }
     color = color_map.get(mission, "gray")
 
-    m = folium.Map(location=[lat, lon], zoom_start=14)
+    if "map_zoom" not in st.session_state:
+        st.session_state["map_zoom"] = 14
+
+    ctrl1, ctrl2, ctrl3 = st.columns(3)
+    with ctrl1:
+        if st.button("Centrar en el vehiculo"):
+            st.session_state["map_zoom"] = 15
+            st.rerun()
+    with ctrl2:
+        if st.button("Vista ciudad"):
+            st.session_state["map_zoom"] = 12
+            st.rerun()
+    with ctrl3:
+        st.caption("Ajusta la vista del mapa para la mision.")
+
+    m = folium.Map(location=[lat, lon], zoom_start=st.session_state["map_zoom"])
 
     # Vehicle marker
     folium.Marker(
@@ -739,18 +923,25 @@ elif page == "Mapa":
 
         # Leyenda del mapa
         if show_compare and len(direct_coords) > 1 and len(route_coords) > 1:
-            legend_html = """
+            legend_html = f"""
             <div style="position: fixed; bottom: 30px; left: 50px; z-index: 1000;
-                        background: rgba(0,0,0,0.75); padding: 10px 14px;
-                        border-radius: 8px; font-size: 13px; color: white;
-                        font-family: sans-serif;">
-                <b>Comparacion de rutas</b><br>
-                <span style="color: #888; font-size: 16px;">- - -</span>
+                        background: rgba(15,23,42,0.92); padding: 10px 16px;
+                        border-radius: 10px; font-size: 13px; color: #f9fafb;
+                        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                        box-shadow: 0 10px 30px rgba(15,23,42,0.85);">
+                <b>Leyenda del mapa</b><br>
+                <span style="color: #888; font-size: 14px; font-weight:bold;">- - - -</span>
                 &nbsp;Ruta directa (distancia)<br>
-                <span style="color: {rc}; font-size: 16px;">___</span>
-                &nbsp;Ruta optima (evita trafico)
+                <span style="color: {route_color}; font-size: 14px; font-weight:bold;">━━━</span>
+                &nbsp;Ruta optima (evita trafico)<br>
+                <span style="color: #2ecc71;">●</span> Trafico fluido &nbsp;
+                <span style="color: #f1c40f;">●</span> Trafico medio &nbsp;
+                <span style="color: #e67e22;">●</span> Trafico denso &nbsp;
+                <span style="color: #e74c3c;">●</span> Trafico critico<br>
+                <span style="color: #3498db;">●</span> Hidrantes &nbsp;
+                <span style="color: #ff0000;">■</span> Estaciones de bomberos
             </div>
-            """.replace("{rc}", route_color)
+            """
             m.get_root().html.add_child(folium.Element(legend_html))
 
     # Hydrants layer

@@ -59,20 +59,20 @@ Prototipo funcional (POC) de un **Gemelo Digital de un camion de bomberos**, des
 
 ## Stack Tecnologico
 
-| Capa | Tecnologia | Justificacion |
-|------|-----------|---------------|
-| Lenguaje | Python 3.11+ | Ecosistema ML maduro, prototipado rapido |
-| Simulacion | Generadores custom + OSM | Telemetria realista + rutas por calles reales |
-| Cartografia | osmnx + networkx | Grafo vial de Valencia, Dijkstra optimizado |
-| Mensajeria | MQTT (Mosquitto) | Protocolo estandar IoT, pub/sub, ligero |
-| Backend/API | FastAPI | Async, alto rendimiento, OpenAPI auto |
-| Base de datos | SQLite + InfluxDB | Persistencia ligera + series temporales |
-| IA — Anomalias | scikit-learn (Isolation Forest) | Sin entrenamiento supervisado |
-| IA — Prediccion | statsmodels (ARIMA) | Series temporales en edge |
-| Dashboard | Streamlit + Plotly + Folium | Dashboards interactivos en Python |
-| Tiempo real | WebSockets + MQTT | Streaming bidireccional |
-| Contenedores | Docker Compose | Despliegue reproducible |
-| Infraestructura | Raspberry Pi 5 (8GB) + SSD | Edge computing, bajo coste |
+| Capa            | Tecnologia                      | Justificacion                                 |
+|-----------------|---------------------------------|-----------------------------------------------|
+| Lenguaje        | Python 3.11+                    | Ecosistema ML maduro, prototipado rapido      |
+| Simulacion      | Generadores custom + OSM        | Telemetria realista + rutas por calles reales |
+| Cartografia     | osmnx + networkx                | Grafo vial de Valencia, Dijkstra optimizado   |
+| Mensajeria      | MQTT (Mosquitto)                | Protocolo estandar IoT, pub/sub, ligero       |
+| Backend/API     | FastAPI                         | Async, alto rendimiento, OpenAPI auto         |
+| Base de datos   | SQLite + InfluxDB               | Persistencia ligera + series temporales       |
+| IA — Anomalias  | scikit-learn (Isolation Forest) | Sin entrenamiento supervisado                 |
+| IA — Prediccion | statsmodels (ARIMA)             | Series temporales en edge                     |
+| Dashboard       | Streamlit + Plotly + Folium     | Dashboards interactivos en Python             |
+| Tiempo real     | WebSockets + MQTT               | Streaming bidireccional                       |
+| Contenedores    | Docker Compose                  | Despliegue reproducible                       |
+| Infraestructura | Raspberry Pi 5 (8GB) + SSD      | Edge computing, bajo coste                    |
 
 ---
 
@@ -103,10 +103,10 @@ El simulador genera datos realistas cada 2 segundos para un camion de bomberos B
 
 Escenarios de simulacion ejecutables desde el dashboard:
 
-| Escenario | Descripcion |
-|-----------|-------------|
-| `pump_failure_during_fire` | Fallo de bomba durante incendio activo |
-| `multi_fire_saturation` | 3 incendios simultaneos con 2 unidades |
+| Escenario                  | Descripcion                                |
+|----------------------------|--------------------------------------------|
+| `pump_failure_during_fire` | Fallo de bomba durante incendio activo     |
+| `multi_fire_saturation`    | 3 incendios simultaneos con 2 unidades     |
 | `ladder_hydraulic_failure` | Fallo hidraulico durante rescate en altura |
 
 ### 5. Modulo de Cartografia y Trafico
@@ -197,49 +197,49 @@ bomberos/ruta/BOM-001          → Datos de ruta activa
 ## API Endpoints
 
 ### Estado del Gemelo (`/api/v1/twin`)
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/{vehicle_id}/state` | Estado actual completo |
-| GET | `/{vehicle_id}/history` | Historico de estados |
-| GET | `/{vehicle_id}/health` | Salud del vehiculo |
-| WS | `/{vehicle_id}/stream` | WebSocket tiempo real |
+| Metodo   | Ruta                    | Descripcion            |
+|----------|-------------------------|------------------------|
+| GET      | `/{vehicle_id}/state`   | Estado actual completo |
+| GET      | `/{vehicle_id}/history` | Historico de estados   |
+| GET      | `/{vehicle_id}/health`  | Salud del vehiculo     |
+| WS       | `/{vehicle_id}/stream`  | WebSocket tiempo real  |
 
 ### Alertas y Anomalias
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/alerts/{vehicle_id}` | Alertas activas |
-| GET | `/alerts/{vehicle_id}/history` | Historico de alertas |
-| GET | `/anomalies/{vehicle_id}` | Anomalias + risk score |
+| Metodo   | Ruta                           | Descripcion            |
+|----------|--------------------------------|------------------------|
+| GET      | `/alerts/{vehicle_id}`         | Alertas activas        |
+| GET      | `/alerts/{vehicle_id}/history` | Historico de alertas   |
+| GET      | `/anomalies/{vehicle_id}`      | Anomalias + risk score |
 
 ### Simulacion (`/api/v1/simulate`)
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/scenarios` | Escenarios disponibles |
-| POST | `/scenario` | Ejecutar what-if |
-| POST | `/failure` | Simular fallo |
+| Metodo   | Ruta         | Descripcion            |
+|----------|--------------|------------------------|
+| GET      | `/scenarios` | Escenarios disponibles |
+| POST     | `/scenario`  | Ejecutar what-if       |
+| POST     | `/failure`   | Simular fallo          |
 
 ### Prediccion IA (`/api/v1/predict`)
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/{vehicle_id}/failures` | Prediccion de fallos |
-| GET | `/{vehicle_id}/maintenance` | Mantenimiento preventivo |
+| Metodo   | Ruta                        | Descripcion              |
+|----------|-----------------------------|--------------------------|
+| GET      | `/{vehicle_id}/failures`    | Prediccion de fallos     |
+| GET      | `/{vehicle_id}/maintenance` | Mantenimiento preventivo |
 
 ### Cartografia y Trafico (`/api/v1/geo`)
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/{vehicle_id}/route` | Ruta activa (optima + directa) |
-| GET | `/poi/hydrants` | Hidrantes de Valencia |
-| GET | `/poi/stations` | Estaciones de bomberos |
-| GET | `/traffic/current` | Factor de congestion global |
-| GET | `/traffic/zones` | Congestion por zona (12 zonas) |
-| POST | `/force-emergency` | Forzar emergencia |
+| Metodo   | Ruta                  | Descripcion                    |
+|----------|-----------------------|--------------------------------|
+| GET      | `/{vehicle_id}/route` | Ruta activa (optima + directa) |
+| GET      | `/poi/hydrants`       | Hidrantes de Valencia          |
+| GET      | `/poi/stations`       | Estaciones de bomberos         |
+| GET      | `/traffic/current`    | Factor de congestion global    |
+| GET      | `/traffic/zones`      | Congestion por zona (12 zonas) |
+| POST     | `/force-emergency`    | Forzar emergencia              |
 
 ### Ecosistema (`/api/v1/ecosystem`)
-| Metodo | Ruta | Descripcion |
-|--------|------|-------------|
-| GET | `/status` | Estado de gemelos conectados |
-| GET | `/twins` | Lista de gemelos registrados |
-| POST | `/event` | Enviar evento inter-gemelo |
+| Metodo   | Ruta      | Descripcion                  |
+|----------|-----------|------------------------------|
+| GET      | `/status` | Estado de gemelos conectados |
+| GET      | `/twins`  | Lista de gemelos registrados |
+| POST     | `/event`  | Enviar evento inter-gemelo   |
 
 ---
 
@@ -261,25 +261,25 @@ docker compose up --build -d
 
 ### Acceso
 
-| Servicio | Puerto | URL |
-|----------|--------|-----|
-| Dashboard | 8501 | http://localhost:8501 |
-| API REST | 8002 | http://localhost:8002 |
-| API Docs | 8002 | http://localhost:8002/docs |
-| MQTT Broker | 1883 | mqtt://localhost:1883 |
-| InfluxDB | 8086 | http://localhost:8086 |
+| Servicio    | Puerto   | URL                        |
+|-------------|----------|----------------------------|
+| Dashboard   | 8501     | http://localhost:8501      |
+| API REST    | 8002     | http://localhost:8002      |
+| API Docs    | 8002     | http://localhost:8002/docs |
+| MQTT Broker | 1883     | mqtt://localhost:1883      |
+| InfluxDB    | 8086     | http://localhost:8086      |
 
 ### Recursos estimados
 
-| Contenedor | RAM | CPU |
-|------------|-----|-----|
-| mosquitto | ~20 MB | Minimo |
-| simulator | ~300 MB | Medio (osmnx) |
-| twin-engine | ~200 MB | Medio (IA) |
-| api | ~100 MB | Bajo |
-| dashboard | ~150 MB | Bajo |
-| influxdb | ~150 MB | Bajo |
-| **Total** | **~920 MB** | **Holgado en Pi 5** |
+| Contenedor  | RAM         | CPU                 |
+|-------------|-------------|---------------------|
+| mosquitto   | ~20 MB      | Minimo              |
+| simulator   | ~300 MB     | Medio (osmnx)       |
+| twin-engine | ~200 MB     | Medio (IA)          |
+| api         | ~100 MB     | Bajo                |
+| dashboard   | ~150 MB     | Bajo                |
+| influxdb    | ~150 MB     | Bajo                |
+| **Total**   | **~920 MB** | **Holgado en Pi 5** |
 
 ---
 
@@ -374,13 +374,13 @@ HPEFumadas/
 
 Transformar el dashboard de "monitor pasivo" a **centro de control operativo**:
 
-| Funcionalidad | Descripcion | Impacto |
-|---------------|-------------|---------|
-| **Dispatch manual** | Arrastrar-y-soltar vehiculos a emergencias desde el mapa | El operador asigna misiones, no solo las observa |
-| **Chat de mando** | Canal de texto en tiempo real entre centro y vehiculos via MQTT | Comunicacion bidireccional integrada |
-| **Alertas con acciones** | Cada alerta presenta botones de accion (confirmar, escalar, descartar) | Gestion activa de alertas, no solo visualizacion |
-| **Timeline de mision** | Linea temporal visual del ciclo de mision con marcas de eventos | Trazabilidad completa de cada intervencion |
-| **Modo pantalla completa** | Vista optimizada para pantalla grande en sala de control | Presentacion profesional para demo |
+| Funcionalidad              | Descripcion                                                            | Impacto                                          |
+|----------------------------|------------------------------------------------------------------------|--------------------------------------------------|
+| **Dispatch manual**        | Arrastrar-y-soltar vehiculos a emergencias desde el mapa               | El operador asigna misiones, no solo las observa |
+| **Chat de mando**          | Canal de texto en tiempo real entre centro y vehiculos via MQTT        | Comunicacion bidireccional integrada             |
+| **Alertas con acciones**   | Cada alerta presenta botones de accion (confirmar, escalar, descartar) | Gestion activa de alertas, no solo visualizacion |
+| **Timeline de mision**     | Linea temporal visual del ciclo de mision con marcas de eventos        | Trazabilidad completa de cada intervencion       |
+| **Modo pantalla completa** | Vista optimizada para pantalla grande en sala de control               | Presentacion profesional para demo               |
 
 ### Fase 2: Gestion Inteligente de Alarmas
 
@@ -400,13 +400,13 @@ Nivel 4: EMERGENCIA
      (accion automatica + notificacion a toda la cadena de mando)
 ```
 
-| Tipo de Alarma | Trigger | Accion Automatica |
-|----------------|---------|-------------------|
-| Mecanica | Motor > 115C, bomba < 30 PSI | Reducir operacion, solicitar relevo |
-| Operativa | Agua < 15% en escena | Despachar cisterna |
-| Seguridad | 2+ anomalias simultaneas | Evacuacion del vehiculo |
-| Coordinacion | Vehiculo no responde en 30s | Alertar centro de mando |
-| Escalado | Incendio > capacidad | Solicitar refuerzos automaticamente |
+| Tipo de Alarma   | Trigger                      | Accion Automatica                   |
+|------------------|------------------------------|-------------------------------------|
+| Mecanica         | Motor > 115C, bomba < 30 PSI | Reducir operacion, solicitar relevo |
+| Operativa        | Agua < 15% en escena         | Despachar cisterna                  |
+| Seguridad        | 2+ anomalias simultaneas     | Evacuacion del vehiculo             |
+| Coordinacion     | Vehiculo no responde en 30s  | Alertar centro de mando             |
+| Escalado         | Incendio > capacidad         | Solicitar refuerzos automaticamente |
 
 **Flujo de escalado:**
 1. Alerta detectada por twin-engine (reglas + IA)
@@ -419,12 +419,12 @@ Nivel 4: EMERGENCIA
 
 Integrar estandares reales de emergencias:
 
-| Protocolo | Uso | Implementacion |
-|-----------|-----|----------------|
-| **CAP** (Common Alerting Protocol) | Formato estandar de alertas OASIS | Wrapper XML/JSON sobre MQTT |
-| **NIMS/ICS** | Sistema de Mando de Incidentes | Roles (IC, Operations, Logistics) en el modelo |
-| **EMSI** (Emergency Management Shared Information) | Compartir info entre agencias | API REST inter-organizacion |
-| **TETRA/P25** | Radio digital de emergencias | Simulacion de canal de voz via WebSocket |
+| Protocolo                                          | Uso                               | Implementacion                                 |
+|----------------------------------------------------|-----------------------------------|------------------------------------------------|
+| **CAP** (Common Alerting Protocol)                 | Formato estandar de alertas OASIS | Wrapper XML/JSON sobre MQTT                    |
+| **NIMS/ICS**                                       | Sistema de Mando de Incidentes    | Roles (IC, Operations, Logistics) en el modelo |
+| **EMSI** (Emergency Management Shared Information) | Compartir info entre agencias     | API REST inter-organizacion                    |
+| **TETRA/P25**                                      | Radio digital de emergencias      | Simulacion de canal de voz via WebSocket       |
 
 **Mensaje inter-agencia (propuesta CAP simplificado):**
 
@@ -454,23 +454,23 @@ Integrar estandares reales de emergencias:
 
 ### Fase 4: IA Avanzada
 
-| Capacidad | Algoritmo | Descripcion |
-|-----------|-----------|-------------|
-| **Despliegue predictivo** | Clustering + series temporales | Pre-posicionar vehiculos en zonas de alto riesgo segun hora/dia |
-| **Estimacion de recursos** | Clasificador ML | Dado tipo de emergencia, estimar bomberos/agua/espuma necesarios |
-| **Optimizacion de flota** | Programacion lineal | Asignar vehiculos a emergencias minimizando tiempo total de respuesta |
-| **NLP para despacho** | LLM (Claude API) | Operador describe emergencia en texto libre, sistema extrae tipo/ubicacion/severidad |
-| **Vision por camara** | YOLO/deteccion objetos | Detectar humo/fuego desde camaras del vehiculo (futuro con hardware real) |
+| Capacidad                  | Algoritmo                      | Descripcion                                                                          |
+|----------------------------|--------------------------------|--------------------------------------------------------------------------------------|
+| **Despliegue predictivo**  | Clustering + series temporales | Pre-posicionar vehiculos en zonas de alto riesgo segun hora/dia                      |
+| **Estimacion de recursos** | Clasificador ML                | Dado tipo de emergencia, estimar bomberos/agua/espuma necesarios                     |
+| **Optimizacion de flota**  | Programacion lineal            | Asignar vehiculos a emergencias minimizando tiempo total de respuesta                |
+| **NLP para despacho**      | LLM (Claude API)               | Operador describe emergencia en texto libre, sistema extrae tipo/ubicacion/severidad |
+| **Vision por camara**      | YOLO/deteccion objetos         | Detectar humo/fuego desde camaras del vehiculo (futuro con hardware real)            |
 
 ### Fase 5: Hardware Real (Post-Hackathon)
 
-| Componente | Proposito | Conexion |
-|------------|-----------|----------|
-| GPS modulo (NEO-6M) | Posicion real del vehiculo | UART → Raspberry Pi |
-| Sensores OBD-II | Telemetria real del motor | Bluetooth → adapter |
-| Sensor de flujo | Nivel real de tanque de agua | GPIO → ADC |
-| Camara termica | Deteccion de focos de calor | USB → OpenCV |
-| LoRa modulo | Comunicacion en zonas sin cobertura | SPI → gateway |
+| Componente          | Proposito                           | Conexion            |
+|---------------------|-------------------------------------|---------------------|
+| GPS modulo (NEO-6M) | Posicion real del vehiculo          | UART → Raspberry Pi |
+| Sensores OBD-II     | Telemetria real del motor           | Bluetooth → adapter |
+| Sensor de flujo     | Nivel real de tanque de agua        | GPIO → ADC          |
+| Camara termica      | Deteccion de focos de calor         | USB → OpenCV        |
+| LoRa modulo         | Comunicacion en zonas sin cobertura | SPI → gateway       |
 
 ---
 
@@ -505,12 +505,12 @@ docker compose up --build -d
 
 ## Equipo
 
-| Rol | Responsabilidad |
-|-----|----------------|
-| Arquitecto | Diseno del sistema, modelo de datos, infraestructura Docker |
-| Backend Developer | API, motor del gemelo, GeoEngine, procesamiento MQTT |
-| Data Scientist | Modelos de IA (anomalias, prediccion, decisiones) |
-| Frontend/Dashboard | Visualizacion Streamlit, mapa interactivo, UX |
+| Rol                | Responsabilidad                                             |
+|--------------------|-------------------------------------------------------------|
+| Arquitecto         | Diseno del sistema, modelo de datos, infraestructura Docker |
+| Backend Developer  | API, motor del gemelo, GeoEngine, procesamiento MQTT        |
+| Data Scientist     | Modelos de IA (anomalias, prediccion, decisiones)           |
+| Frontend/Dashboard | Visualizacion Streamlit, mapa interactivo, UX               |
 
 ---
 
