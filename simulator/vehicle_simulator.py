@@ -67,6 +67,8 @@ class VehicleSimulator:
 
         # Flag para forzar emergencia desde comando externo
         self._force_emergency = False
+        self._paused = False
+        self._speed_factor = 1.0
 
         # MQTT
         self.client = mqtt.Client(client_id=f"sim-{self.vehicle_id}")
@@ -139,6 +141,31 @@ class VehicleSimulator:
             elif cmd in ("confirm_alert", "dismiss_alert", "escalate_alert"):
                 aid = payload.get("alert_id", "?")
                 logger.info(f"Comando recibido: {cmd} (alert_id={aid})")
+            elif cmd == "pause":
+                self._paused = True
+                logger.info("Simulacion pausada por comando externo")
+            elif cmd == "resume":
+                self._paused = False
+                logger.info("Simulacion reanudada por comando externo")
+            elif cmd == "set_speed":
+                try:
+                    factor = float(payload.get("speed_factor") or 1.0)
+                except (TypeError, ValueError):
+                    factor = 1.0
+                self._speed_factor = max(0.25, min(factor, 4.0))
+                logger.info(f"Factor de velocidad ajustado a {self._speed_factor:.2f}x")
+            elif cmd == "reset_mission":
+                logger.info("Comando recibido: reset_mission")
+                self.mission_status = "disponible"
+                self._route = []
+                self._route_index = 0
+                self._route_sim = None
+                self.on_route = False
+                self.speed_kmh = 0.0
+                self.engine_rpm = 800
+                self.engine_temp = 85.0
+                self.sirens_active = False
+                self.lights_active = False
         except Exception as e:
             logger.error(f"Error procesando comando: {e}")
 
@@ -456,6 +483,10 @@ class VehicleSimulator:
                 self.eta_seconds = 0.0
                 self.distance_remaining_m = 0.0
 
+                # Asegurar que al llegar a base el camion esta parado y en reposo
+                self.speed_kmh = 0.0
+                self.engine_rpm = 800
+
                 # Publicar ruta completada
                 self.client.publish(TOPIC_ROUTE, json.dumps({
                     "type": "route_completed",
@@ -526,16 +557,18 @@ class VehicleSimulator:
 
         try:
             while True:
-                self.step()
-                state = self.get_state()
-                logger.debug(
-                    f"[{state['timestamp']}] {self.mission_status} | "
-                    f"vel={self.speed_kmh:.0f}km/h | "
-                    f"motor={self.engine_temp:.0f}°C | "
-                    f"agua={self.water_tank_level:.0f}% | "
-                    f"bomba={self.pump_pressure:.0f}PSI"
-                )
-                time.sleep(TICK_INTERVAL)
+                if not self._paused:
+                    self.step()
+                    state = self.get_state()
+                    logger.debug(
+                        f"[{state['timestamp']}] {self.mission_status} | "
+                        f"vel={self.speed_kmh:.0f}km/h | "
+                        f"motor={self.engine_temp:.0f}°C | "
+                        f"agua={self.water_tank_level:.0f}% | "
+                        f"bomba={self.pump_pressure:.0f}PSI"
+                    )
+                effective_interval = TICK_INTERVAL / self._speed_factor
+                time.sleep(effective_interval)
         except KeyboardInterrupt:
             logger.info("Simulador detenido")
         finally:

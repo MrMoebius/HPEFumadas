@@ -1,8 +1,11 @@
-"""Endpoints REST para cartografía, rutas activas, POIs y tráfico."""
+"""Endpoints REST para cartografía, rutas activas, POIs, tráfico y control."""
 
 import json
+from typing import Optional
 
 from fastapi import APIRouter
+from pydantic import BaseModel
+
 from api.state import shared_state
 from config.settings import TOPIC_COMMANDS
 from geo.poi import load_hydrants, load_stations
@@ -69,3 +72,20 @@ def force_emergency():
         qos=1,
     )
     return {"status": "ok", "message": "Comando de emergencia enviado"}
+
+
+class ControlCommand(BaseModel):
+    command: str
+    speed_factor: Optional[float] = None
+
+
+@router.post("/control")
+def control_simulation(cmd: ControlCommand):
+    """Control de simulacion: pause/resume/reset_mission/set_speed."""
+    payload = cmd.dict()
+    shared_state.client.publish(
+        TOPIC_COMMANDS,
+        json.dumps(payload),
+        qos=1,
+    )
+    return {"status": "ok", "command": cmd.command}

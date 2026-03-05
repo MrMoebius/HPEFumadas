@@ -1,6 +1,7 @@
 """Dashboard del Gemelo Digital — Camion de Bomberos BOM-001."""
 
 import os
+import time
 import requests
 import plotly.graph_objects as go
 import folium
@@ -183,6 +184,18 @@ SEVERITY_ICONS = {
 }
 
 
+if "alerts_muted_until" not in st.session_state:
+    st.session_state["alerts_muted_until"] = 0.0
+
+
+def alerts_are_muted() -> bool:
+    return time.time() < st.session_state.get("alerts_muted_until", 0.0)
+
+
+def mute_alerts(minutes: int = 5):
+    st.session_state["alerts_muted_until"] = time.time() + minutes * 60
+
+
 # ── Fetch core data ────────────────────────────────────────────────────────
 
 state = api_get(f"/api/v1/twin/{VEHICLE_ID}/state")
@@ -247,6 +260,8 @@ with st.sidebar:
         label = f"{total_alerts} alerta(s) activa(s)"
         if crit_count:
             label += f" | {crit_count} critica(s)"
+        if alerts_are_muted():
+            label += " · SILENCIADAS"
         st.error(f"\U0001F514 {label}")
 
     # Navigation
@@ -263,14 +278,13 @@ with st.sidebar:
 
     st.divider()
 
-    # Force emergency button
+    # Force emergency button (atajo desde sidebar)
     if state and state.get("mission_status") == "disponible":
         if st.button("SIMULAR EMERGENCIA", type="primary"):
             resp = api_post("/api/v1/geo/force-emergency", {})
             if resp and resp.get("status") == "ok":
                 st.success("Emergencia enviada!")
-                import time as _t
-                _t.sleep(1)
+                time.sleep(1)
                 st.rerun()
             else:
                 st.error("Error enviando comando")
@@ -289,12 +303,13 @@ with st.sidebar:
 if auto and page != "Mapa":
     st_autorefresh(interval=5000, key="auto_refresh")
 
-# ── Guard ───────────────────────────────────────────────────────────────────
+# ── Guard / banner de conectividad ─────────────────────────────────────────
 
 if not state:
-    st.warning("Esperando datos de telemetria del vehiculo...")
+    st.error("SIN DATOS — posible problema de conexion con API o MQTT")
     st.info(f"API: {API_URL}")
     st.stop()
+
 
 # ── Header global ───────────────────────────────────────────────────────────
 
@@ -350,12 +365,113 @@ with header:
         else:
             st.caption("Severidad actual: SIN ALERTAS")
 
+# ── Salud del sistema / observabilidad ─────────────────────────────────────
+
+sys_col1, sys_col2, sys_col3, sys_col4 = st.columns(4)
+
+# Edad de la ultima telemetria
+age_seconds = None
+ts_str = state.get("timestamp")
+if ts_str:
+    try:
+        # Timestamp en formato ISO UTC "2026-03-02T22:30:00Z"
+        if ts_str.endswith("Z"):
+            ts_str_clean = ts_str[:-1]
+        else:
+            ts_str_clean = ts_str
+        last_dt = datetime.fromisoformat(ts_str_clean)
+        now_dt = datetime.utcnow()
+        age_seconds = max(0, (now_dt - last_dt).total_seconds())
+    except Exception:
+        age_seconds = None
+
+with sys_col1:
+    if health:
+        st.metric("API / Twin", "OK", help="Respuesta de /health recibida")
+    else:
+        st.metric("API / Twin", "ERROR")
+with sys_col2:
+    if age_seconds is not None:
+        label = f"{int(age_seconds)}s"
+        if age_seconds < 5:
+            st.success(f"Ultima telemetria: {label}")
+        elif age_seconds < 20:
+            st.warning(f"Ultima telemetria: {label}")
+        else:
+            st.error(f"Ultima telemetria: {label}")
+    else:
+        st.metric("Ultima telemetria", "N/D")
+with sys_col3:
+    # Heuristica: si hay telemetria reciente, MQTT OK
+    if age_seconds is not None and age_seconds < 20:
+        st.metric("MQTT", "OK")
+    else:
+        st.metric("MQTT", "SOSPECHOSO")
+with sys_col4:
+    # Placeholder: asumimos InfluxDB OK si API responde health
+    if health:
+        st.metric("InfluxDB", "OK")
+    else:
+        st.metric("InfluxDB", "DESCONOCIDO")
+
+if age_seconds is not None and age_seconds > 20:
+    st.error("Sin telemetria reciente — revisa simulador y conexion MQTT.")
+
 # ════════════════════════════════════════════════════════════════════════════
 #  CENTRO DE MANDO
 # ════════════════════════════════════════════════════════════════════════════
 
 if page == "Centro de Mando":
     st.header("Centro de Mando")
+
+    # Panel de acciones rapidas
+    ac1, ac2, ac3, ac4 = st.columns([1.2, 1.2, 1.2, 1.5])
+    with ac1:
+        if st.button("Forzar emergencia"):
+            resp = api_post("/api/v1/geo/force-emergency", {})
+            if resp and resp.get("status") == "ok":
+                st.success("Emergencia enviada")
+            else:
+                st.error("No se pudo forzar la emergencia")
+    with ac2:
+        scenarios_resp = api_get("/api/v1/simulate/scenarios")
+        scenario_name = None
+        if scenarios_resp and scenarios_resp.get("scenarios"):
+            scenario_dict = scenarios_resp["scenarios"]
+            names = list(scenario_dict.keys())
+            scenario_name = st.selectbox(
+                "Escenario what-if",
+                names,
+                format_func=lambda x: x.replace("_", " ").title(),
+                key="cm_scenario",
+            )
+        if scenario_name and st.button("Lanzar escenario"):
+            st.session_state["last_scenario"] = scenario_name
+            result = api_post("/api/v1/simulate/scenario", {"scenario": scenario_name})
+            if result and "error" not in result:
+                st.success("Escenario ejecutado")
+            else:
+                st.error("Error al ejecutar escenario")
+    with ac3:
+        if st.button("Resetear mision"):
+            resp = api_post("/api/v1/geo/control", {"command": "reset_mission"})
+            if resp and resp.get("status") == "ok":
+                st.success("Mision reseteada")
+            else:
+                st.error("No se pudo resetear la mision")
+    with ac4:
+        if st.button("Repetir ultima mision"):
+            last = st.session_state.get("last_scenario")
+            if last:
+                result = api_post("/api/v1/simulate/scenario", {"scenario": last})
+                if result and "error" not in result:
+                    st.success(f"Repetido escenario: {last}")
+                else:
+                    st.error("Error repitiendo escenario")
+            else:
+                st.info("Aun no se ha ejecutado ningun escenario")
+
+    st.divider()
 
     col_timeline, col_alerts, col_chat = st.columns(3)
 
@@ -588,6 +704,15 @@ elif page == "Alertas":
 
     with tab_act:
         if alerts_data and alerts_data.get("count", 0) > 0:
+            mute_col1, mute_col2 = st.columns([1, 3])
+            with mute_col1:
+                if st.button("Silenciar 5 min"):
+                    mute_alerts(5)
+                    st.success("Alertas silenciadas durante 5 minutos")
+            with mute_col2:
+                if alerts_are_muted():
+                    st.caption("Alertas silenciadas temporalmente; siguen mostrandose en la lista, pero el contador se marca como silenciado.")
+
             for a in alerts_data["alerts"]:
                 sev = a.get("severity", "informativa")
                 msg = a.get("message", a.get("metric", "Sin detalle"))
@@ -640,8 +765,15 @@ elif page == "Alertas":
     with tab_hist:
         hist = api_get(f"/api/v1/alerts/{VEHICLE_ID}/history")
         if hist and hist.get("count", 0) > 0:
+            sev_filter = st.multiselect(
+                "Filtrar por severidad",
+                options=["emergencia", "critica", "advertencia", "informativa"],
+                default=["emergencia", "critica", "advertencia", "informativa"],
+            )
             for a in hist["alerts"]:
                 sev = a.get("severity", "informativa")
+                if sev_filter and sev not in sev_filter:
+                    continue
                 sev_icon = SEVERITY_ICONS.get(sev, "\U0001F535")
                 cat = a.get("category", "")
                 msg = a.get("message", a.get("metric", ""))
@@ -684,11 +816,21 @@ elif page == "Alertas":
 elif page == "Telemetria":
     st.header("Telemetria Historica")
 
-    history_resp = api_get(f"/api/v1/twin/{VEHICLE_ID}/history?limit=200")
+    history_resp = api_get(f"/api/v1/twin/{VEHICLE_ID}/history?limit=400")
 
     if history_resp and history_resp.get("count", 0) > 5:
-        data = history_resp["history"]
-        ticks = list(range(len(data)))
+        full_data = history_resp["history"]
+        full_ticks = list(range(len(full_data)))
+
+        max_tick = len(full_data) - 1
+        default_start = max(0, max_tick - 200)
+        start_tick, end_tick = st.slider(
+            "Rango de tiempo (ticks)",
+            0, max_tick,
+            (default_start, max_tick),
+        )
+        data = full_data[start_tick:end_tick + 1]
+        ticks = list(range(start_tick, end_tick + 1))
 
         # Metric selector
         all_metrics = [
@@ -1061,6 +1203,24 @@ elif page == "Mapa":
                         delta_color="off",
                     )
 
+    # Vista de ecosistema / otros vehiculos
+    st.divider()
+    st.subheader("Ecosistema de Vehiculos")
+    eco = api_get("/api/v1/ecosystem/status")
+    if eco and eco.get("twins"):
+        for twin in eco["twins"]:
+            cols = st.columns([1, 2, 2, 2])
+            with cols[0]:
+                st.markdown(f"**{twin.get('twin_id')}**")
+            with cols[1]:
+                st.caption(twin.get("type", ""))
+            with cols[2]:
+                st.caption(f"Estado: {twin.get('status', 'unknown')}")
+            with cols[3]:
+                st.caption(f"Mision: {twin.get('mission_status', 'unknown')}")
+    else:
+        st.caption("Sin informacion de ecosistema disponible")
+
 # ════════════════════════════════════════════════════════════════════════════
 #  SIMULACION
 # ════════════════════════════════════════════════════════════════════════════
@@ -1082,10 +1242,30 @@ elif page == "Simulacion":
             )
             st.info(f"**Descripcion:** {scenario_dict[selected]}")
 
-            if st.button("Ejecutar Escenario", type="primary"):
+            col_run, col_repeat = st.columns(2)
+            with col_run:
+                run_clicked = st.button("Ejecutar Escenario", type="primary")
+            with col_repeat:
+                repeat_clicked = st.button("Repetir ultimo", type="secondary")
+
+            if run_clicked:
                 with st.spinner("Ejecutando simulacion..."):
                     result = api_post("/api/v1/simulate/scenario", {"scenario": selected})
+                st.session_state["last_scenario"] = selected
 
+            elif repeat_clicked:
+                last = st.session_state.get("last_scenario")
+                if not last:
+                    st.info("Aun no se ha ejecutado ningun escenario")
+                    result = None
+                else:
+                    with st.spinner(f"Repitiendo {last}..."):
+                        result = api_post("/api/v1/simulate/scenario", {"scenario": last})
+
+            else:
+                result = None
+
+            if result is not None:
                 if result and "error" not in result:
                     st.success("Simulacion completada")
 
@@ -1167,6 +1347,20 @@ elif page == "Simulacion":
                             st.subheader("Decisiones")
                             for d in decisions:
                                 st.warning(f"\u26A0\uFE0F {d}")
+
+                    # Vista comparativa antes/despues (primeros vs ultimos ticks)
+                    if sim_steps:
+                        st.subheader("Antes vs Despues")
+                        n = max(3, min(10, len(sim_steps) // 4))
+                        start_window = sim_steps[:n]
+                        end_window = sim_steps[-n:]
+                        avg_speed_before = sum(s.get("speed_kmh", 0) for s in start_window) / n
+                        avg_speed_after = sum(s.get("speed_kmh", 0) for s in end_window) / n
+                        before_col, after_col = st.columns(2)
+                        with before_col:
+                            st.metric("Velocidad media (inicio)", f"{avg_speed_before:.1f} km/h")
+                        with after_col:
+                            st.metric("Velocidad media (fin)", f"{avg_speed_after:.1f} km/h")
 
                     with st.expander("JSON completo"):
                         st.json(result)
