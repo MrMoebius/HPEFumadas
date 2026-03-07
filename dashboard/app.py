@@ -183,6 +183,11 @@ SEVERITY_ICONS = {
     "info": "\U0001F535",
 }
 
+SCENARIO_LABELS = {
+    "pump_failure_during_fire": "Fallo de bomba durante incendio",
+    "multi_fire_saturation": "Saturacion por multiples incendios",
+    "ladder_hydraulic_failure": "Fallo hidraulico de escalera",
+}
 
 if "alerts_muted_until" not in st.session_state:
     st.session_state["alerts_muted_until"] = 0.0
@@ -311,8 +316,8 @@ with st.sidebar:
     if st.button("Actualizar ahora"):
         st.rerun()
 
-# Auto-refresh (desactivado en Mapa para no reiniciar la vista)
-if auto and page != "Mapa":
+# Auto-refresh (desactivado en Mapa y Simulacion para no perder resultados)
+if auto and page not in ("Mapa", "Simulacion"):
     st_autorefresh(interval=5000, key="auto_refresh")
 
 # ── Guard / banner de conectividad ─────────────────────────────────────────
@@ -454,7 +459,7 @@ if page == "Centro de Mando":
             scenario_name = st.selectbox(
                 "Escenario what-if",
                 names,
-                format_func=lambda x: x.replace("_", " ").title(),
+                format_func=lambda x: SCENARIO_LABELS.get(x, x.replace("_", " ").title()),
                 key="cm_scenario",
             )
         if scenario_name and st.button("Lanzar escenario"):
@@ -725,7 +730,7 @@ elif page == "Alertas":
                 if alerts_are_muted():
                     st.caption("Alertas silenciadas temporalmente; siguen mostrandose en la lista, pero el contador se marca como silenciado.")
 
-            for a in alerts_data["alerts"]:
+            for idx, a in enumerate(alerts_data["alerts"]):
                 sev = a.get("severity", "informativa")
                 msg = a.get("message", a.get("metric", "Sin detalle"))
                 cat = a.get("category", "alerta")
@@ -757,15 +762,15 @@ elif page == "Alertas":
                 # Botones de accion
                 ac1, ac2, ac3, ac4 = st.columns([1, 1, 1, 3])
                 with ac1:
-                    if st.button("Confirmar", key=f"conf_{aid}"):
+                    if st.button("Confirmar", key=f"conf_{aid}_{idx}"):
                         api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/confirm")
                         st.rerun()
                 with ac2:
-                    if st.button("Escalar", key=f"esc2_{aid}"):
+                    if st.button("Escalar", key=f"esc2_{aid}_{idx}"):
                         api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/escalate")
                         st.rerun()
                 with ac3:
-                    if st.button("Descartar", key=f"dis_{aid}"):
+                    if st.button("Descartar", key=f"dis_{aid}_{idx}"):
                         api_post(f"/api/v1/alerts/{VEHICLE_ID}/{aid}/dismiss")
                         st.rerun()
 
@@ -1258,7 +1263,7 @@ elif page == "Simulacion":
             names = list(scenario_dict.keys())
             selected = st.selectbox(
                 "Seleccionar escenario", names,
-                format_func=lambda x: x.replace("_", " ").title(),
+                format_func=lambda x: SCENARIO_LABELS.get(x, x.replace("_", " ").title()),
             )
             st.info(f"**Descripcion:** {scenario_dict[selected]}")
 
@@ -1272,18 +1277,18 @@ elif page == "Simulacion":
                 with st.spinner("Ejecutando simulacion..."):
                     result = api_post("/api/v1/simulate/scenario", {"scenario": selected})
                 st.session_state["last_scenario"] = selected
+                st.session_state["sim_result"] = result
 
             elif repeat_clicked:
                 last = st.session_state.get("last_scenario")
                 if not last:
                     st.info("Aun no se ha ejecutado ningun escenario")
-                    result = None
                 else:
-                    with st.spinner(f"Repitiendo {last}..."):
+                    with st.spinner(f"Repitiendo {SCENARIO_LABELS.get(last, last)}..."):
                         result = api_post("/api/v1/simulate/scenario", {"scenario": last})
+                    st.session_state["sim_result"] = result
 
-            else:
-                result = None
+            result = st.session_state.get("sim_result")
 
             if result is not None:
                 if result and "error" not in result:
