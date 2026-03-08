@@ -1,6 +1,7 @@
 """
-GeoEngine — Carga grafo OSM de Valencia, calcula rutas reales por calles.
+GeoEngine — Carga grafos OSM de multiples ciudades, calcula rutas reales por calles.
 Usa cache en disco (.graphml) para evitar descargar el grafo cada vez.
+Carga lazy: solo se descarga el grafo de una ciudad cuando se solicita.
 """
 
 import os
@@ -8,27 +9,47 @@ import math
 from loguru import logger
 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
-GRAPHML_PATH = os.path.join(CACHE_DIR, "valencia_drive.graphml")
 
-# Bounding box de Valencia centro (approx.)
-VALENCIA_CENTER = (39.4699, -0.3763)
-VALENCIA_DIST_M = 8000  # radio en metros para descargar el grafo
+# Configuracion por ciudad: centro y radio de descarga
+CITY_CONFIGS = {
+    "Valencia": {"center": (39.4699, -0.3763), "dist_m": 8000},
+    "Madrid": {"center": (40.4168, -3.7038), "dist_m": 10000},
+    "Barcelona": {"center": (41.3874, 2.1686), "dist_m": 10000},
+    "Sevilla": {"center": (37.3891, -5.9845), "dist_m": 8000},
+    "Bilbao": {"center": (43.2630, -2.9350), "dist_m": 7000},
+}
+
+DEFAULT_CITY = "Valencia"
 
 
 class GeoEngine:
-    """Motor de cartografía basado en OSM + osmnx + networkx."""
+    """Motor de cartografia basado en OSM + osmnx + networkx. Soporte multi-ciudad."""
 
     def __init__(self):
-        self.graph = None
-        self._graph_undirected = None
+        self._graphs = {}           # city -> grafo dirigido
+        self._graphs_undirected = {}  # city -> grafo no-dirigido
+        self._travel_times = set()  # ciudades con travel_time ya calculado
+        self._active_city = DEFAULT_CITY
         self.available = False
         self._ox = None
         self._nx = None
-        self._has_travel_times = False
-        self._load()
+        self._load_libs()
+        # Cargar Valencia al inicio (como antes)
+        if self._ox is not None:
+            self.load_city(DEFAULT_CITY)
 
-    def _load(self):
-        """Intenta cargar el grafo OSM, primero desde cache, luego descargando."""
+    @property
+    def graph(self):
+        """Grafo de la ciudad activa (compatibilidad)."""
+        return self._graphs.get(self._active_city)
+
+    @property
+    def _graph_undirected(self):
+        """Grafo no-dirigido de la ciudad activa (compatibilidad)."""
+        return self._graphs_undirected.get(self._active_city)
+
+    def _load_libs(self):
+        """Importa osmnx y networkx."""
         try:
             import osmnx as ox
             import networkx as nx
@@ -36,141 +57,176 @@ class GeoEngine:
             self._nx = nx
         except ImportError:
             logger.warning("osmnx/networkx no disponibles — GeoEngine desactivado")
-            return
+
+    def _cache_path(self, city: str) -> str:
+        """Ruta del archivo cache para una ciudad."""
+        slug = city.lower().replace(" ", "_")
+        return os.path.join(CACHE_DIR, f"{slug}_drive.graphml")
+
+    def load_city(self, city: str) -> bool:
+        """Carga el grafo OSM de una ciudad (desde cache o descargando)."""
+        if city in self._graphs:
+            self._active_city = city
+            return True
+
+        if self._ox is None:
+            return False
+
+        config = CITY_CONFIGS.get(city)
+        if not config:
+            logger.warning(f"Ciudad '{city}' no configurada en CITY_CONFIGS")
+            return False
 
         os.makedirs(CACHE_DIR, exist_ok=True)
+        cache_file = self._cache_path(city)
 
         # Intentar cargar desde cache
-        if os.path.exists(GRAPHML_PATH):
+        if os.path.exists(cache_file):
             try:
-                self.graph = self._ox.load_graphml(GRAPHML_PATH)
-                self._graph_undirected = self.graph.to_undirected()
+                g = self._ox.load_graphml(cache_file)
+                self._graphs[city] = g
+                self._graphs_undirected[city] = g.to_undirected()
+                self._active_city = city
                 self.available = True
                 logger.info(
-                    f"GeoEngine loaded (cache): "
-                    f"{self.graph.number_of_nodes()} nodos, "
-                    f"{self.graph.number_of_edges()} aristas"
+                    f"GeoEngine loaded {city} (cache): "
+                    f"{g.number_of_nodes()} nodos, "
+                    f"{g.number_of_edges()} aristas"
                 )
-                return
+                return True
             except Exception as e:
-                logger.warning(f"Error leyendo cache graphml: {e}")
+                logger.warning(f"Error leyendo cache graphml de {city}: {e}")
 
         # Descargar el grafo desde OSM
         try:
+            center = config["center"]
+            dist = config["dist_m"]
             logger.info(
-                "Descargando grafo OSM de Valencia "
-                f"(radio {VALENCIA_DIST_M}m)... puede tardar 30-60s"
+                f"Descargando grafo OSM de {city} "
+                f"(radio {dist}m)... puede tardar 30-60s"
             )
-            self.graph = self._ox.graph_from_point(
-                VALENCIA_CENTER, dist=VALENCIA_DIST_M,
+            g = self._ox.graph_from_point(
+                center, dist=dist,
                 network_type="drive", simplify=True,
             )
-            self._ox.save_graphml(self.graph, GRAPHML_PATH)
-            self._graph_undirected = self.graph.to_undirected()
+            self._ox.save_graphml(g, cache_file)
+            self._graphs[city] = g
+            self._graphs_undirected[city] = g.to_undirected()
+            self._active_city = city
             self.available = True
             logger.info(
-                f"GeoEngine loaded (descargado): "
-                f"{self.graph.number_of_nodes()} nodos, "
-                f"{self.graph.number_of_edges()} aristas"
+                f"GeoEngine loaded {city} (descargado): "
+                f"{g.number_of_nodes()} nodos, "
+                f"{g.number_of_edges()} aristas"
             )
+            return True
         except Exception as e:
-            logger.error(f"No se pudo descargar grafo OSM: {e}")
-            logger.warning("GeoEngine NO disponible — se usará fallback de waypoints")
+            logger.error(f"No se pudo descargar grafo OSM de {city}: {e}")
+            logger.warning(f"GeoEngine NO disponible para {city}")
+            return False
 
-    def shortest_route(self, origin: tuple, destination: tuple) -> list[tuple]:
+    def _get_graphs(self, city: str | None):
+        """Obtiene el par (dirigido, no-dirigido) para la ciudad solicitada."""
+        city = city or self._active_city
+        if city not in self._graphs:
+            self.load_city(city)
+        g = self._graphs.get(city)
+        gu = self._graphs_undirected.get(city)
+        return g, gu, city
+
+    def shortest_route(self, origin: tuple, destination: tuple, city: str | None = None) -> list[tuple]:
         """
-        Calcula la ruta más corta entre dos coordenadas (lat, lon).
+        Calcula la ruta mas corta entre dos coordenadas (lat, lon).
         Retorna lista de (lat, lon) representando la ruta por calles reales.
         Primero intenta grafo dirigido, si falla usa no-dirigido (ignora sentidos).
-        Retorna lista vacía si no se puede calcular.
+        Retorna lista vacia si no se puede calcular.
         """
-        if not self.available:
+        g, gu, city = self._get_graphs(city)
+        if g is None:
             return []
 
         try:
-            orig_node = self._ox.nearest_nodes(
-                self.graph, X=origin[1], Y=origin[0]
-            )
-            dest_node = self._ox.nearest_nodes(
-                self.graph, X=destination[1], Y=destination[0]
-            )
+            orig_node = self._ox.nearest_nodes(g, X=origin[1], Y=origin[0])
+            dest_node = self._ox.nearest_nodes(g, X=destination[1], Y=destination[0])
 
-            # Intentar ruta en grafo dirigido (respeta sentidos)
             try:
                 route_nodes = self._nx.shortest_path(
-                    self.graph, orig_node, dest_node, weight="length"
+                    g, orig_node, dest_node, weight="length"
                 )
             except self._nx.NetworkXNoPath:
-                # Fallback a grafo no-dirigido (ignora sentidos, pero sigue calles)
                 logger.debug("Sin ruta dirigida, usando grafo no-dirigido")
                 route_nodes = self._nx.shortest_path(
-                    self._graph_undirected, orig_node, dest_node, weight="length"
+                    gu, orig_node, dest_node, weight="length"
                 )
 
             coords = []
             for node in route_nodes:
-                data = self.graph.nodes[node]
+                data = g.nodes[node]
                 coords.append((data["y"], data["x"]))
 
             return coords
 
         except Exception as e:
-            logger.error(f"Error calculando ruta: {e}")
+            logger.error(f"Error calculando ruta en {city}: {e}")
             return []
 
-    def _ensure_travel_times(self):
-        """Añade speed_kph y travel_time a las aristas si no existen."""
-        if self._has_travel_times:
+    def _ensure_travel_times(self, city: str | None = None):
+        """Anade speed_kph y travel_time a las aristas si no existen."""
+        city = city or self._active_city
+        if city in self._travel_times:
             return
+
+        g = self._graphs.get(city)
+        gu = self._graphs_undirected.get(city)
+        if g is None:
+            return
+
         try:
-            self._ox.add_edge_speeds(self.graph)
-            self._ox.add_edge_travel_times(self.graph)
-            # También al grafo no-dirigido
-            if self._graph_undirected is not None:
+            self._ox.add_edge_speeds(g)
+            self._ox.add_edge_travel_times(g)
+            if gu is not None:
                 try:
-                    self._ox.add_edge_speeds(self._graph_undirected)
-                    self._ox.add_edge_travel_times(self._graph_undirected)
+                    self._ox.add_edge_speeds(gu)
+                    self._ox.add_edge_travel_times(gu)
                 except Exception:
-                    for _, _, data in self._graph_undirected.edges(data=True):
+                    for _, _, data in gu.edges(data=True):
                         length = data.get("length", 100)
                         data["travel_time"] = length / 11.1
-            self._has_travel_times = True
-            logger.info("Travel times añadidos al grafo")
+            self._travel_times.add(city)
+            logger.info(f"Travel times anadidos al grafo de {city}")
         except Exception as e:
-            logger.warning(f"osmnx add_edge_speeds falló: {e} — usando fallback 40km/h")
-            for _, _, data in self.graph.edges(data=True):
+            logger.warning(f"osmnx add_edge_speeds fallo para {city}: {e} — usando fallback 40km/h")
+            for _, _, data in g.edges(data=True):
                 length = data.get("length", 100)
                 data["travel_time"] = length / 11.1
-            if self._graph_undirected is not None:
-                for _, _, data in self._graph_undirected.edges(data=True):
+            if gu is not None:
+                for _, _, data in gu.edges(data=True):
                     length = data.get("length", 100)
                     data["travel_time"] = length / 11.1
-            self._has_travel_times = True
+            self._travel_times.add(city)
 
     def fastest_route(
         self, origin: tuple, destination: tuple, traffic_zones: list[dict],
+        city: str | None = None,
     ) -> list[tuple]:
         """
-        Calcula la ruta más rápida evitando zonas congestionadas.
+        Calcula la ruta mas rapida evitando zonas congestionadas.
         traffic_zones: lista de dicts con lat, lon, radius, congestion_factor.
-        Retorna lista de (lat, lon). Lista vacía si falla.
+        Retorna lista de (lat, lon). Lista vacia si falla.
         """
-        if not self.available:
+        g, gu, city = self._get_graphs(city)
+        if g is None:
             return []
 
         try:
-            self._ensure_travel_times()
+            self._ensure_travel_times(city)
 
-            orig_node = self._ox.nearest_nodes(
-                self.graph, X=origin[1], Y=origin[0]
-            )
-            dest_node = self._ox.nearest_nodes(
-                self.graph, X=destination[1], Y=destination[0]
-            )
+            orig_node = self._ox.nearest_nodes(g, X=origin[1], Y=origin[0])
+            dest_node = self._ox.nearest_nodes(g, X=destination[1], Y=destination[0])
 
-            # Pre-computar congestión por nodo
+            # Pre-computar congestion por nodo
             node_congestion = {}
-            for node, ndata in self.graph.nodes(data=True):
+            for node, ndata in g.nodes(data=True):
                 nlat, nlon = ndata["y"], ndata["x"]
                 max_cong = 1.0
                 for z in traffic_zones:
@@ -182,8 +238,8 @@ class GeoEngine:
                 if max_cong > 1.0:
                     node_congestion[node] = max_cong
 
-            # traffic_time = travel_time * congestión en cada arista
-            for u, v, data in self.graph.edges(data=True):
+            # traffic_time = travel_time * congestion en cada arista
+            for u, v, data in g.edges(data=True):
                 base = data.get("travel_time", data.get("length", 100) / 11.1)
                 cong = max(
                     node_congestion.get(u, 1.0),
@@ -193,11 +249,11 @@ class GeoEngine:
 
             try:
                 route_nodes = self._nx.shortest_path(
-                    self.graph, orig_node, dest_node, weight="traffic_time"
+                    g, orig_node, dest_node, weight="traffic_time"
                 )
             except self._nx.NetworkXNoPath:
                 logger.debug("Sin ruta dirigida (traffic), usando no-dirigido")
-                for u, v, data in self._graph_undirected.edges(data=True):
+                for u, v, data in gu.edges(data=True):
                     base = data.get("travel_time", data.get("length", 100) / 11.1)
                     cong = max(
                         node_congestion.get(u, 1.0),
@@ -205,19 +261,19 @@ class GeoEngine:
                     )
                     data["traffic_time"] = base * cong
                 route_nodes = self._nx.shortest_path(
-                    self._graph_undirected, orig_node, dest_node,
+                    gu, orig_node, dest_node,
                     weight="traffic_time",
                 )
 
             coords = []
             for node in route_nodes:
-                data = self.graph.nodes[node]
+                data = g.nodes[node]
                 coords.append((data["y"], data["x"]))
 
             return coords
 
         except Exception as e:
-            logger.error(f"Error calculando ruta rápida: {e}")
+            logger.error(f"Error calculando ruta rapida en {city}: {e}")
             return []
 
     def route_distance_m(self, coords: list[tuple]) -> float:

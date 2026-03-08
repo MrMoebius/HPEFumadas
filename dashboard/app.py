@@ -275,7 +275,25 @@ with st.sidebar:
     if "city" not in st.session_state:
         st.session_state["city"] = cities[0]
     city = st.selectbox("Ciudad", cities, index=cities.index(st.session_state["city"]) if st.session_state["city"] in cities else 0)
-    st.session_state["city"] = city
+    if city != st.session_state["city"]:
+        st.session_state["city"] = city
+        st.session_state.pop("station", None)
+        st.rerun()
+
+    # Station selector (filtrado por ciudad)
+    stations_resp = api_get(f"/api/v1/geo/poi/stations?city={city}")
+    stations_list = stations_resp.get("stations", []) if stations_resp else []
+    if stations_list:
+        station_names = [s["name"] for s in stations_list]
+        current_station_name = None
+        if "station" in st.session_state and st.session_state["station"]:
+            current_station_name = st.session_state["station"].get("name")
+        default_idx = 0
+        if current_station_name and current_station_name in station_names:
+            default_idx = station_names.index(current_station_name)
+        selected_station_name = st.selectbox("Estacion base", station_names, index=default_idx)
+        selected_station = next((s for s in stations_list if s["name"] == selected_station_name), stations_list[0])
+        st.session_state["station"] = selected_station
 
     # Navigation
     page = st.radio(
@@ -359,7 +377,7 @@ with header:
         st.markdown(
             f"### \U0001F692 Gemelo Digital — **{VEHICLE_ID}**",
         )
-        st.caption("Centro de mando operacional · Ciudad de Valencia")
+        st.caption(f"Centro de mando operacional · {st.session_state.get('city', 'Valencia')}")
     with h2:
         icons = {
             "disponible": "\U0001F7E2",
@@ -955,8 +973,12 @@ elif page == "Telemetria":
 elif page == "Mapa":
     st.header("Mapa y Cartografia")
 
-    lat = state.get("latitude", 39.4699)
-    lon = state.get("longitude", -0.3763)
+    _station = st.session_state.get("station", {})
+    _station_lat = _station.get("lat", 39.4699)
+    _station_lon = _station.get("lon", -0.3763)
+    _station_name = _station.get("name", "Estacion Base")
+    lat = state.get("latitude", _station_lat)
+    lon = state.get("longitude", _station_lon)
     speed = state.get("speed_kmh", 0)
     mission = state.get("mission_status", "disponible")
 
@@ -1005,14 +1027,15 @@ elif page == "Mapa":
 
     # Base station
     folium.Marker(
-        [39.4699, -0.3763],
-        popup="Estacion Base — Bomberos Valencia",
+        [_station_lat, _station_lon],
+        popup=f"Estacion Base — {_station_name}",
         tooltip="Base",
         icon=folium.Icon(color="darkred", icon="home", prefix="fa"),
     ).add_to(m)
 
     # Traffic zones layer
-    traffic_data = api_get("/api/v1/geo/traffic/zones") if show_traffic else None
+    _current_city = st.session_state.get("city", "Valencia")
+    traffic_data = api_get(f"/api/v1/geo/traffic/zones?city={_current_city}") if show_traffic else None
     if traffic_data:
         for z in traffic_data.get("zones", []):
             cf = z.get("congestion_factor", 1.0)
@@ -1103,14 +1126,9 @@ elif page == "Mapa":
             """
             m.get_root().html.add_child(folium.Element(legend_html))
 
-    current_city = st.session_state.get("city")
-
     # Hydrants layer
     if show_hydrants:
-        if current_city:
-            hydrants_resp = api_get(f"/api/v1/geo/poi/hydrants?city={current_city}")
-        else:
-            hydrants_resp = api_get("/api/v1/geo/poi/hydrants")
+        hydrants_resp = api_get(f"/api/v1/geo/poi/hydrants?city={_current_city}")
         if hydrants_resp:
             for h in hydrants_resp.get("hydrants", []):
                 folium.CircleMarker(
@@ -1126,10 +1144,7 @@ elif page == "Mapa":
 
     # Fire stations layer
     if show_stations:
-        if current_city:
-            stations_resp = api_get(f"/api/v1/geo/poi/stations?city={current_city}")
-        else:
-            stations_resp = api_get("/api/v1/geo/poi/stations")
+        stations_resp = api_get(f"/api/v1/geo/poi/stations?city={_current_city}")
         if stations_resp:
             for s in stations_resp.get("stations", []):
                 folium.Marker(
@@ -1502,7 +1517,11 @@ elif page == "IA Avanzada":
             rm3.metric("Riesgo maximo", f"{max_risk:.0%}")
 
             # Mapa Folium
-            m_risk = folium.Map(location=[39.4699, -0.3763], zoom_start=12)
+            _risk_station = st.session_state.get("station", {})
+            m_risk = folium.Map(
+                location=[_risk_station.get("lat", 39.4699), _risk_station.get("lon", -0.3763)],
+                zoom_start=12,
+            )
 
             # Circulos de riesgo
             for z in zones:

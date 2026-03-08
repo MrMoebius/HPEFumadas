@@ -61,9 +61,9 @@ def get_current_traffic():
 
 
 @router.get("/traffic/zones")
-def get_traffic_zones():
+def get_traffic_zones(city: Optional[str] = None):
     """Zonas de tráfico simulado con nivel de congestión por zona."""
-    zones = get_zones_with_congestion()
+    zones = get_zones_with_congestion(city=city or "Valencia")
     factor = _traffic.congestion_factor()
     for z in zones:
         z["description"] = _traffic.describe(z["congestion_factor"])

@@ -20,16 +20,16 @@
   },
   {
     "id": "EST003",
-    "name": "Parque de Bomberos Jesús",
+    "name": "Parque de Bomberos Jesus",
     "lat": 39.4530,
     "lon": -0.3790,
-    "address": "Calle San José de Calasanz, Valencia",
+    "address": "Calle San Jose de Calasanz, Valencia",
     "type": "distrito",
     "city": "Valencia"
   },
   {
     "id": "EST004",
-    "name": "Parque de Bomberos Marítimo",
+    "name": "Parque de Bomberos Maritimo",
     "lat": 39.4570,
     "lon": -0.3380,
     "address": "Av. del Puerto, Valencia",
@@ -41,8 +41,165 @@
     "name": "Parque de Bomberos Benimaclet",
     "lat": 39.4920,
     "lon": -0.3580,
-    "address": "Calle Emilio Baró, Valencia",
+    "address": "Calle Emilio Baro, Valencia",
     "type": "distrito",
     "city": "Valencia"
+  },
+  {
+    "id": "EST-MAD-001",
+    "name": "Parque de Bomberos Puerta de Toledo",
+    "lat": 40.4087,
+    "lon": -3.7117,
+    "address": "Ronda de Toledo, Madrid",
+    "type": "central",
+    "city": "Madrid",
+    "is_base": true
+  },
+  {
+    "id": "EST-MAD-002",
+    "name": "Parque de Bomberos Vallecas",
+    "lat": 40.3782,
+    "lon": -3.6512,
+    "address": "Av. de la Albufera, Vallecas, Madrid",
+    "type": "distrito",
+    "city": "Madrid"
+  },
+  {
+    "id": "EST-MAD-003",
+    "name": "Parque de Bomberos Chamartin",
+    "lat": 40.4723,
+    "lon": -3.6823,
+    "address": "Calle de Mateo Inurria, Chamartin, Madrid",
+    "type": "distrito",
+    "city": "Madrid"
+  },
+  {
+    "id": "EST-MAD-004",
+    "name": "Parque de Bomberos Hortaleza",
+    "lat": 40.4780,
+    "lon": -3.6408,
+    "address": "Calle de Silvano, Hortaleza, Madrid",
+    "type": "distrito",
+    "city": "Madrid"
+  },
+  {
+    "id": "EST-MAD-005",
+    "name": "Parque de Bomberos Carabanchel",
+    "lat": 40.3843,
+    "lon": -3.7390,
+    "address": "Calle de Antonio Leyva, Carabanchel, Madrid",
+    "type": "distrito",
+    "city": "Madrid"
+  },
+  {
+    "id": "EST-BCN-001",
+    "name": "Parque de Bomberos Eixample",
+    "lat": 41.3880,
+    "lon": 2.1530,
+    "address": "Calle de Provenca, Eixample, Barcelona",
+    "type": "central",
+    "city": "Barcelona",
+    "is_base": true
+  },
+  {
+    "id": "EST-BCN-002",
+    "name": "Parque de Bomberos Sant Andreu",
+    "lat": 41.4350,
+    "lon": 2.1895,
+    "address": "Calle de Sant Adria, Sant Andreu, Barcelona",
+    "type": "distrito",
+    "city": "Barcelona"
+  },
+  {
+    "id": "EST-BCN-003",
+    "name": "Parque de Bomberos Montjuic",
+    "lat": 41.3680,
+    "lon": 2.1580,
+    "address": "Carrer del Foc, Montjuic, Barcelona",
+    "type": "distrito",
+    "city": "Barcelona"
+  },
+  {
+    "id": "EST-BCN-004",
+    "name": "Parque de Bomberos Vall d'Hebron",
+    "lat": 41.4285,
+    "lon": 2.1460,
+    "address": "Passeig de la Vall d'Hebron, Barcelona",
+    "type": "distrito",
+    "city": "Barcelona"
+  },
+  {
+    "id": "EST-BCN-005",
+    "name": "Parque de Bomberos Zona Franca",
+    "lat": 41.3520,
+    "lon": 2.1335,
+    "address": "Carrer 3, Zona Franca, Barcelona",
+    "type": "distrito",
+    "city": "Barcelona"
+  },
+  {
+    "id": "EST-SEV-001",
+    "name": "Parque de Bomberos Ronda del Tamarguillo",
+    "lat": 37.3870,
+    "lon": -5.9720,
+    "address": "Ronda del Tamarguillo, Sevilla",
+    "type": "central",
+    "city": "Sevilla",
+    "is_base": true
+  },
+  {
+    "id": "EST-SEV-002",
+    "name": "Parque de Bomberos Triana",
+    "lat": 37.3830,
+    "lon": -6.0050,
+    "address": "Calle Pages del Corro, Triana, Sevilla",
+    "type": "distrito",
+    "city": "Sevilla"
+  },
+  {
+    "id": "EST-SEV-003",
+    "name": "Parque de Bomberos Macarena",
+    "lat": 37.4050,
+    "lon": -5.9860,
+    "address": "Calle Doctor Fedriani, Macarena, Sevilla",
+    "type": "distrito",
+    "city": "Sevilla"
+  },
+  {
+    "id": "EST-SEV-004",
+    "name": "Parque de Bomberos Nervion",
+    "lat": 37.3880,
+    "lon": -5.9650,
+    "address": "Av. de Eduardo Dato, Nervion, Sevilla",
+    "type": "distrito",
+    "city": "Sevilla"
+  },
+  {
+    "id": "EST-BIL-001",
+    "name": "Parque de Bomberos Miribilla",
+    "lat": 43.2560,
+    "lon": -2.9220,
+    "address": "Calle Miribilla, Bilbao",
+    "type": "central",
+    "city": "Bilbao",
+    "is_base": true
+  },
+  {
+    "id": "EST-BIL-002",
+    "name": "Parque de Bomberos Deusto",
+    "lat": 43.2740,
+    "lon": -2.9460,
+    "address": "Av. Lehendakari Aguirre, Deusto, Bilbao",
+    "type": "distrito",
+    "city": "Bilbao"
+  },
+  {
+    "id": "EST-BIL-003",
+    "name": "Parque de Bomberos Basurto",
+    "lat": 43.2620,
+    "lon": -2.9530,
+    "address": "Av. de Montevideo, Basurto, Bilbao",
+    "type": "distrito",
+    "city": "Bilbao"
   }
 ]
