@@ -105,6 +105,16 @@ def api_post(path: str, body: dict = None):
 # ── Gauge helpers ───────────────────────────────────────────────────────────
 
 
+def _bar_color_for_value(value, lo, hi, steps):
+    """Devuelve el color de la barra segun el valor y los rangos de pasos."""
+    for s in steps:
+        r = s["range"]
+        if r[0] <= value <= r[1]:
+            return s["color"]
+    # Fallback: ultimo paso si esta fuera de rango
+    return steps[-1]["color"] if steps else "#ecf0f1"
+
+
 def gauge(title, value, lo, hi, unit="", steps=None, threshold=None):
     """Gauge where HIGH values are bad (temperature, RPM)."""
     if steps is None:
@@ -113,13 +123,14 @@ def gauge(title, value, lo, hi, unit="", steps=None, threshold=None):
             {"range": [hi * 0.6, hi * 0.85], "color": "#f39c12"},
             {"range": [hi * 0.85, hi], "color": "#e74c3c"},
         ]
+    bar_color = _bar_color_for_value(value, lo, hi, steps)
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
         title={"text": title, "font": {"size": 14}},
         number={"suffix": f" {unit}", "font": {"size": 22}},
         gauge={
             "axis": {"range": [lo, hi], "tickwidth": 1},
-            "bar": {"color": "#2c3e50"},
+            "bar": {"color": bar_color},
             "steps": steps,
             "threshold": {
                 "line": {"color": "red", "width": 3},
@@ -141,13 +152,14 @@ def gauge_rev(title, value, lo, hi, unit="", warn=None, crit=None):
         {"range": [c, w], "color": "#f39c12"},
         {"range": [w, hi], "color": "#2ecc71"},
     ]
+    bar_color = _bar_color_for_value(value, lo, hi, steps)
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=value,
         title={"text": title, "font": {"size": 14}},
         number={"suffix": f" {unit}", "font": {"size": 22}},
         gauge={
             "axis": {"range": [lo, hi], "tickwidth": 1},
-            "bar": {"color": "#2c3e50"},
+            "bar": {"color": bar_color},
             "steps": steps,
             "threshold": {
                 "line": {"color": "red", "width": 3},
@@ -666,17 +678,17 @@ elif page == "Estado en Tiempo Real":
     c5, c6, c7, c8 = st.columns(4)
     pump = state.get("pump_pressure", 0)
     with c5:
-        pump_steps = ([
-            {"range": [0, 30], "color": "#e74c3c"},
-            {"range": [30, 80], "color": "#f39c12"},
-            {"range": [80, 200], "color": "#2ecc71"},
-        ] if pump > 0 else [
-            {"range": [0, 200], "color": "#bdc3c7"},
-        ])
-        st.plotly_chart(gauge(
-            "Bomba", pump, 0, 200, "PSI",
-            steps=pump_steps, threshold=30,
-        ), use_container_width=True)
+        if pump > 0:
+            st.plotly_chart(gauge_rev(
+                "Bomba", pump, 0, 200, "PSI",
+                warn=80, crit=30,
+            ), use_container_width=True)
+        else:
+            pump_off_steps = [{"range": [0, 200], "color": "#bdc3c7"}]
+            st.plotly_chart(gauge(
+                "Bomba", 0, 0, 200, "PSI",
+                steps=pump_off_steps, threshold=200,
+            ), use_container_width=True)
     with c6:
         st.plotly_chart(gauge_rev(
             "Espuma", state.get("foam_tank_level", 0), 0, 100, "%",
@@ -977,10 +989,18 @@ elif page == "Mapa":
     _station_lat = _station.get("lat", 39.4699)
     _station_lon = _station.get("lon", -0.3763)
     _station_name = _station.get("name", "Estacion Base")
-    lat = state.get("latitude", _station_lat)
-    lon = state.get("longitude", _station_lon)
+    _current_city = st.session_state.get("city", "Valencia")
+
+    # Posicion real del vehiculo (simulador solo corre en Valencia)
+    veh_lat = state.get("latitude", 39.4699)
+    veh_lon = state.get("longitude", -0.3763)
     speed = state.get("speed_kmh", 0)
     mission = state.get("mission_status", "disponible")
+    _vehicle_in_city = (_current_city == "Valencia")
+
+    # Centro del mapa: estacion seleccionada (no el vehiculo)
+    map_center_lat = _station_lat
+    map_center_lon = _station_lon
 
     # Sidebar layer controls
     with st.sidebar:
@@ -1006,24 +1026,38 @@ elif page == "Mapa":
     ctrl1, ctrl2, ctrl3 = st.columns(3)
     with ctrl1:
         if st.button("Centrar en el vehiculo"):
-            st.session_state["map_zoom"] = 15
-            st.rerun()
+            if _vehicle_in_city:
+                st.session_state["map_zoom"] = 15
+                st.rerun()
+            else:
+                st.warning("El vehiculo opera en Valencia")
     with ctrl2:
         if st.button("Vista ciudad"):
             st.session_state["map_zoom"] = 12
             st.rerun()
     with ctrl3:
-        st.caption("Ajusta la vista del mapa para la mision.")
+        st.caption(f"Mapa: {_current_city}")
 
-    m = folium.Map(location=[lat, lon], zoom_start=st.session_state["map_zoom"])
+    # Centrar en vehiculo si esta en la ciudad, si no en la estacion
+    if _vehicle_in_city and st.session_state["map_zoom"] == 15:
+        m = folium.Map(location=[veh_lat, veh_lon], zoom_start=st.session_state["map_zoom"])
+    else:
+        m = folium.Map(location=[map_center_lat, map_center_lon], zoom_start=st.session_state["map_zoom"])
 
-    # Vehicle marker
-    folium.Marker(
-        [lat, lon],
-        popup=f"BOM-001 | {mission} | {speed:.0f} km/h",
-        tooltip="BOM-001 — " + mission.replace("_", " ").upper(),
-        icon=folium.Icon(color=color, icon="fire-extinguisher", prefix="fa"),
-    ).add_to(m)
+    # Vehicle marker (solo visible si el vehiculo esta en esta ciudad)
+    if _vehicle_in_city:
+        _veh_popup = (
+            f"<b>BOM-001</b><br>"
+            f"Estado: {mission.replace('_', ' ').upper()}<br>"
+            f"Velocidad: {speed:.0f} km/h<br>"
+            f"Pos: {veh_lat:.5f}, {veh_lon:.5f}"
+        )
+        folium.Marker(
+            [veh_lat, veh_lon],
+            popup=folium.Popup(_veh_popup, max_width=250),
+            tooltip=f"BOM-001 — {mission.replace('_', ' ').upper()} | {speed:.0f} km/h",
+            icon=folium.Icon(color=color, icon="fire-extinguisher", prefix="fa"),
+        ).add_to(m)
 
     # Base station
     folium.Marker(
@@ -1034,7 +1068,6 @@ elif page == "Mapa":
     ).add_to(m)
 
     # Traffic zones layer
-    _current_city = st.session_state.get("city", "Valencia")
     traffic_data = api_get(f"/api/v1/geo/traffic/zones?city={_current_city}") if show_traffic else None
     if traffic_data:
         for z in traffic_data.get("zones", []):
@@ -1060,8 +1093,8 @@ elif page == "Mapa":
                 tooltip=f"{z['name']}: {z['description']}",
             ).add_to(m)
 
-    # Active route from geo API
-    route_data = api_get(f"/api/v1/geo/{VEHICLE_ID}/route")
+    # Active route from geo API (solo si vehiculo en esta ciudad)
+    route_data = api_get(f"/api/v1/geo/{VEHICLE_ID}/route") if _vehicle_in_city else None
     if show_route and route_data and route_data.get("active"):
         route_coords = route_data.get("coords", [])
         direct_coords = route_data.get("direct_coords", [])
@@ -1154,12 +1187,12 @@ elif page == "Mapa":
                     icon=folium.Icon(color="red", icon="building", prefix="fa"),
                 ).add_to(m)
 
-    # Trail from history
-    if show_trail:
+    # Trail from history (solo si vehiculo en la ciudad)
+    if show_trail and _vehicle_in_city:
         trail_resp = api_get(f"/api/v1/twin/{VEHICLE_ID}/history?limit=60")
         if trail_resp and trail_resp.get("count", 0) > 1:
             trail = [
-                [d.get("latitude", lat), d.get("longitude", lon)]
+                [d.get("latitude", veh_lat), d.get("longitude", veh_lon)]
                 for d in trail_resp["history"]
                 if d.get("speed_kmh", 0) > 0
             ]
@@ -1168,24 +1201,32 @@ elif page == "Mapa":
 
     st_folium(m, width=None, height=550, returned_objects=[])
 
-    # Metrics below map
-    mc1, mc2, mc3, mc4 = st.columns(4)
-    mc1.metric("Latitud", f"{lat:.6f}")
-    mc2.metric("Longitud", f"{lon:.6f}")
-    mc3.metric("Velocidad", f"{speed:.0f} km/h")
-
-    # Traffic — siempre visible
-    traffic_resp = api_get("/api/v1/geo/traffic/current")
-    if traffic_resp:
-        factor = traffic_resp.get("congestion_factor", 1.0)
-        desc = traffic_resp.get("description", "")
-        mc4.metric("Trafico", desc.upper(), delta=f"{factor:.2f}x", delta_color="off")
-    else:
+    # Panel de estado del vehiculo
+    if _vehicle_in_city:
+        st.subheader(f"Vehiculo BOM-001 — {mission.replace('_', ' ').upper()}")
+        mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+        mc1.metric("Latitud", f"{veh_lat:.5f}")
+        mc2.metric("Longitud", f"{veh_lon:.5f}")
+        mc3.metric("Velocidad", f"{speed:.0f} km/h")
         mc4.metric("Rumbo", f"{state.get('heading', 0):.0f}\u00b0")
+        # Traffic
+        traffic_resp = api_get("/api/v1/geo/traffic/current")
+        if traffic_resp:
+            factor = traffic_resp.get("congestion_factor", 1.0)
+            desc = traffic_resp.get("description", "")
+            mc5.metric("Trafico", desc.upper(), delta=f"{factor:.2f}x", delta_color="off")
+        else:
+            mc5.metric("Trafico", "N/D")
+    else:
+        st.info(f"El vehiculo BOM-001 opera actualmente en Valencia. Mostrando mapa de {_current_city}.")
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("Estacion", _station_name)
+        mc2.metric("Latitud", f"{_station_lat:.5f}")
+        mc3.metric("Longitud", f"{_station_lon:.5f}")
 
-    # Route info (ETA, progress, distance)
+    # Route info (ETA, progress, distance) — solo si vehiculo en la ciudad
     on_route = state.get("on_route", False)
-    if on_route:
+    if on_route and _vehicle_in_city:
         st.divider()
         st.subheader("Ruta Activa")
 
