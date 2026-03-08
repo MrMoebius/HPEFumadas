@@ -201,6 +201,24 @@ SCENARIO_LABELS = {
     "ladder_hydraulic_failure": "Fallo hidraulico de escalera",
 }
 
+EMERGENCY_ICONS = {
+    "incendio_vivienda": {"icon": "fire", "color": "red", "label": "Incendio Vivienda"},
+    "incendio_industrial": {"icon": "industry", "color": "darkred", "label": "Incendio Industrial"},
+    "accidente_trafico": {"icon": "car-burst", "color": "orange", "label": "Accidente Trafico"},
+    "rescate_altura": {"icon": "person-falling", "color": "blue", "label": "Rescate Altura"},
+    "incendio_forestal": {"icon": "tree", "color": "green", "label": "Incendio Forestal"},
+    "fuga_quimica": {"icon": "biohazard", "color": "purple", "label": "Fuga Quimica"},
+}
+
+EMERGENCY_TYPE_LABELS = {
+    "incendio_vivienda": "Incendio en Vivienda",
+    "incendio_industrial": "Incendio Industrial",
+    "accidente_trafico": "Accidente de Trafico",
+    "rescate_altura": "Rescate en Altura",
+    "incendio_forestal": "Incendio Forestal",
+    "fuga_quimica": "Fuga Quimica",
+}
+
 if "alerts_muted_until" not in st.session_state:
     st.session_state["alerts_muted_until"] = 0.0
 
@@ -471,13 +489,74 @@ if age_seconds is not None and age_seconds > 20:
 if page == "Centro de Mando":
     st.header("Centro de Mando")
 
+    # Panel de despacho de emergencias
+    st.subheader("Despacho de Emergencias")
+    _dispatch_city = st.session_state.get("city", "Valencia")
+    emergencies_resp = api_get(f"/api/v1/geo/emergencies?city={_dispatch_city}")
+    emergencies_list = emergencies_resp.get("emergencies", []) if emergencies_resp else []
+
+    dc1, dc2, dc3 = st.columns([1.5, 2, 1])
+    with dc1:
+        etype_options = list(EMERGENCY_TYPE_LABELS.keys())
+        selected_etype = st.selectbox(
+            "Tipo de emergencia",
+            etype_options,
+            format_func=lambda x: EMERGENCY_TYPE_LABELS.get(x, x),
+            key="cm_etype",
+        )
+    with dc2:
+        # Filtrar ubicaciones por tipo seleccionado
+        filtered_emergencies = [e for e in emergencies_list if e.get("type") == selected_etype]
+        if not filtered_emergencies:
+            filtered_emergencies = emergencies_list
+        emergency_names = [e["name"] for e in filtered_emergencies]
+        selected_emergency_name = st.selectbox(
+            "Ubicacion",
+            emergency_names if emergency_names else ["Sin ubicaciones"],
+            key="cm_eloc",
+        )
+        selected_emergency = next(
+            (e for e in filtered_emergencies if e["name"] == selected_emergency_name),
+            None,
+        )
+    with dc3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        dispatch_disabled = (
+            not selected_emergency
+            or not state
+            or state.get("mission_status") != "disponible"
+        )
+        if st.button("DESPACHAR", type="primary", disabled=dispatch_disabled):
+            body = {
+                "emergency_type": selected_etype,
+                "destination_lat": selected_emergency["lat"],
+                "destination_lon": selected_emergency["lon"],
+                "destination_name": selected_emergency["name"],
+            }
+            resp = api_post("/api/v1/geo/force-emergency", body)
+            if resp and resp.get("status") == "ok":
+                st.success(f"Despachado: {selected_emergency['name']}")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("Error enviando despacho")
+    if selected_emergency:
+        st.caption(
+            f"{selected_emergency.get('description', '')} — "
+            f"({selected_emergency['lat']:.4f}, {selected_emergency['lon']:.4f})"
+        )
+    if state and state.get("mission_status") != "disponible":
+        st.warning("Vehiculo en mision — no se puede despachar")
+
+    st.divider()
+
     # Panel de acciones rapidas
     ac1, ac2, ac3, ac4 = st.columns([1.2, 1.2, 1.2, 1.5])
     with ac1:
-        if st.button("Forzar emergencia"):
+        if st.button("Emergencia aleatoria"):
             resp = api_post("/api/v1/geo/force-emergency", {})
             if resp and resp.get("status") == "ok":
-                st.success("Emergencia enviada")
+                st.success("Emergencia aleatoria enviada")
             else:
                 st.error("No se pudo forzar la emergencia")
     with ac2:
@@ -1126,14 +1205,16 @@ elif page == "Mapa":
                 tooltip="Ruta optima",
             ).add_to(m)
 
-            # Destination marker (last coord)
+            # Destination marker (last coord) con icono segun tipo de emergencia
             dest = route_coords[-1]
             dest_name = route_data.get("destination", "Destino")
+            dest_etype = route_data.get("emergency_type", "")
+            dest_icon_info = EMERGENCY_ICONS.get(dest_etype, {"icon": "fire", "color": "orange"})
             folium.Marker(
                 dest,
-                popup=f"Destino: {dest_name}",
-                tooltip=dest_name,
-                icon=folium.Icon(color="orange", icon="fire", prefix="fa"),
+                popup=f"Destino: {dest_name}<br>Tipo: {EMERGENCY_TYPE_LABELS.get(dest_etype, dest_etype)}",
+                tooltip=f"{dest_name} — {EMERGENCY_TYPE_LABELS.get(dest_etype, dest_etype)}",
+                icon=folium.Icon(color=dest_icon_info["color"], icon=dest_icon_info["icon"], prefix="fa"),
             ).add_to(m)
 
         # Leyenda del mapa
@@ -1245,6 +1326,17 @@ elif page == "Mapa":
             rc3.metric("Distancia restante", f"{dist_rem:.0f} m")
 
         st.progress(min(progress, 1.0))
+
+        # Panel de emergencia activa
+        emergency_data = api_get(f"/api/v1/geo/{VEHICLE_ID}/emergency")
+        if emergency_data and emergency_data.get("active"):
+            etype = emergency_data.get("emergency_type", "")
+            edest = emergency_data.get("destination", "")
+            eicon = EMERGENCY_ICONS.get(etype, {})
+            elabel = EMERGENCY_TYPE_LABELS.get(etype, etype or "Desconocido")
+            st.markdown(
+                f"**Emergencia activa:** {elabel} — **{edest}**"
+            )
 
         # Comparación de rutas (directa vs óptima)
         if route_data and route_data.get("active"):

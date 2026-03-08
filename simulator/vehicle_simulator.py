@@ -67,8 +67,8 @@ class VehicleSimulator:
 
         # Flag para forzar emergencia desde comando externo
         self._force_emergency = False
-        self._paused = False
-        self._speed_factor = 1.0
+        self._pending_emergency = None  # dict con type, lat, lon, name
+        self._current_emergency_type = None
         self._paused = False
         self._speed_factor = 1.0
 
@@ -134,7 +134,19 @@ class VehicleSimulator:
             if cmd == "force_emergency":
                 if self.mission_status == "disponible":
                     self._force_emergency = True
-                    logger.info("Comando recibido: FORZAR EMERGENCIA")
+                    # Extraer datos de emergencia especifica (opcionales)
+                    emergency_data = {}
+                    if payload.get("emergency_type"):
+                        emergency_data["type"] = payload["emergency_type"]
+                    if payload.get("destination_lat") is not None and payload.get("destination_lon") is not None:
+                        emergency_data["lat"] = float(payload["destination_lat"])
+                        emergency_data["lon"] = float(payload["destination_lon"])
+                    if payload.get("destination_name"):
+                        emergency_data["name"] = payload["destination_name"]
+                    self._pending_emergency = emergency_data if emergency_data else None
+                    etype = emergency_data.get("type", "aleatoria") if emergency_data else "aleatoria"
+                    ename = emergency_data.get("name", "") if emergency_data else ""
+                    logger.info(f"Comando recibido: FORZAR EMERGENCIA — {etype} {ename}")
                 else:
                     logger.warning(
                         f"Comando force_emergency ignorado — "
@@ -355,20 +367,36 @@ class VehicleSimulator:
             logger.info(f"Misión: {prev_status} → {self.mission_status}")
 
             if self.mission_status == "en_ruta":
-                # Seleccionar ruta aleatoria
-                route_name = random.choice(list(self._routes_data.keys()))
-                route_data = self._routes_data[route_name]
-                self._current_route_name = route_name
-                destination_name = route_data.get("destination", route_name)
+                # Determinar destino: emergencia dirigida o aleatoria
+                emergency = self._pending_emergency
+                self._pending_emergency = None
+
+                if emergency and "lat" in emergency and "lon" in emergency:
+                    # Emergencia dirigida: destino especifico
+                    dest = (emergency["lat"], emergency["lon"])
+                    destination_name = emergency.get("name", "Emergencia")
+                    self._current_emergency_type = emergency.get("type", "incendio_vivienda")
+                    self._current_route_name = destination_name
+                    self._current_destination = dest
+                else:
+                    # Emergencia aleatoria: ruta de routes.json
+                    route_name = random.choice(list(self._routes_data.keys()))
+                    route_data = self._routes_data[route_name]
+                    self._current_route_name = route_name
+                    destination_name = route_data.get("destination", route_name)
+                    wps = route_data["waypoints"]
+                    dest = (wps[-1]["lat"], wps[-1]["lon"])
+                    self._current_destination = dest
+                    self._current_emergency_type = random.choice([
+                        "incendio_vivienda", "accidente_trafico", "rescate_altura",
+                        "incendio_industrial", "fuga_quimica", "incendio_forestal",
+                    ])
 
                 # Intentar ruta real con GeoEngine
                 if self._use_geo:
-                    wps = route_data["waypoints"]
-                    dest = (wps[-1]["lat"], wps[-1]["lon"])
                     origin = (self.latitude, self.longitude)
-                    self._current_destination = dest
 
-                    # Calcular ruta óptima (evita tráfico) y directa (distancia)
+                    # Calcular ruta optima (evita trafico) y directa (distancia)
                     from geo.traffic import get_zones_with_congestion
                     traffic_zones = get_zones_with_congestion()
                     coords = self._geo_engine.fastest_route(
@@ -405,6 +433,7 @@ class VehicleSimulator:
                                 if direct_coords else []
                             ),
                             "destination": destination_name,
+                            "emergency_type": self._current_emergency_type,
                             "total_distance_m": round(total_dist, 1),
                             "direct_distance_m": round(direct_dist, 1),
                             "eta_seconds": round(eta, 1),
@@ -427,7 +456,11 @@ class VehicleSimulator:
 
                 # Fallback: waypoints originales
                 self._route_sim = None
-                self._route = route_data["waypoints"]
+                if emergency and "lat" in emergency and "lon" in emergency:
+                    # Emergencia dirigida sin GeoEngine: waypoint directo
+                    self._route = [{"lat": dest[0], "lon": dest[1]}]
+                else:
+                    self._route = route_data["waypoints"]
                 self._route_index = 0
                 self.on_route = True
                 self.sirens_active = True
@@ -439,11 +472,12 @@ class VehicleSimulator:
                     "type": "route_started",
                     "coords": fallback_coords,
                     "destination": destination_name,
+                    "emergency_type": self._current_emergency_type,
                     "total_distance_m": 0,
                     "eta_seconds": 0,
                     "congestion_factor": 1.0,
                 }), qos=1)
-                logger.info(f"Despachado a: {route_name} (waypoints)")
+                logger.info(f"Despachado a: {self._current_route_name} (waypoints)")
 
             elif self.mission_status == "en_escena":
                 self.sirens_active = False

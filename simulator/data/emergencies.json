@@ -1,0 +1,246 @@
+{
+  "Valencia": [
+    {
+      "id": "VAL-001",
+      "type": "incendio_vivienda",
+      "name": "Incendio en Plaza de la Reina",
+      "address": "Plaza de la Reina, Valencia",
+      "lat": 39.4748,
+      "lon": -0.3680,
+      "description": "Incendio en edificio residencial del centro historico"
+    },
+    {
+      "id": "VAL-002",
+      "type": "accidente_trafico",
+      "name": "Choque en Av. del Puerto",
+      "address": "Av. del Puerto, Valencia",
+      "lat": 39.4620,
+      "lon": -0.3650,
+      "description": "Accidente de trafico con posible atrapamiento"
+    },
+    {
+      "id": "VAL-003",
+      "type": "rescate_altura",
+      "name": "Rescate en Jardines del Turia",
+      "address": "Jardines del Turia, Valencia",
+      "lat": 39.4770,
+      "lon": -0.3815,
+      "description": "Rescate en zona ajardinada del antiguo cauce"
+    },
+    {
+      "id": "VAL-004",
+      "type": "incendio_industrial",
+      "name": "Incendio en Ciudad de las Artes",
+      "address": "Ciudad de las Artes y las Ciencias, Valencia",
+      "lat": 39.4540,
+      "lon": -0.3510,
+      "description": "Incendio en estructura cercana a la Ciudad de las Artes"
+    },
+    {
+      "id": "VAL-005",
+      "type": "fuga_quimica",
+      "name": "Fuga de gas en Puerto de Valencia",
+      "address": "Puerto de Valencia",
+      "lat": 39.4545,
+      "lon": -0.3590,
+      "description": "Fuga de sustancia quimica en zona portuaria"
+    },
+    {
+      "id": "VAL-006",
+      "type": "incendio_forestal",
+      "name": "Incendio forestal en Devesa del Saler",
+      "address": "Devesa del Saler, Valencia",
+      "lat": 39.3720,
+      "lon": -0.3350,
+      "description": "Incendio de vegetacion en zona natural protegida"
+    },
+    {
+      "id": "VAL-007",
+      "type": "incendio_vivienda",
+      "name": "Incendio en Ruzafa",
+      "address": "Calle Sueca, Ruzafa, Valencia",
+      "lat": 39.4630,
+      "lon": -0.3770,
+      "description": "Incendio en vivienda del barrio de Ruzafa"
+    },
+    {
+      "id": "VAL-008",
+      "type": "accidente_trafico",
+      "name": "Choque en Gran Via Germanias",
+      "address": "Gran Via Germanias, Valencia",
+      "lat": 39.4660,
+      "lon": -0.3760,
+      "description": "Colision multiple en avenida principal"
+    }
+  ],
+  "Madrid": [
+    {
+      "id": "MAD-001",
+      "type": "incendio_vivienda",
+      "name": "Incendio en Gran Via",
+      "address": "Gran Via, Madrid",
+      "lat": 40.4200,
+      "lon": -3.7105,
+      "description": "Incendio en edificio residencial de Gran Via"
+    },
+    {
+      "id": "MAD-002",
+      "type": "accidente_trafico",
+      "name": "Choque en Castellana",
+      "address": "Paseo de la Castellana, Madrid",
+      "lat": 40.4510,
+      "lon": -3.6920,
+      "description": "Accidente de trafico en Paseo de la Castellana"
+    },
+    {
+      "id": "MAD-003",
+      "type": "rescate_altura",
+      "name": "Rescate en Retiro",
+      "address": "Parque del Retiro, Madrid",
+      "lat": 40.4153,
+      "lon": -3.6844,
+      "description": "Rescate de persona en el Parque del Retiro"
+    },
+    {
+      "id": "MAD-004",
+      "type": "fuga_quimica",
+      "name": "Fuga de gas en Atocha",
+      "address": "Estacion de Atocha, Madrid",
+      "lat": 40.4070,
+      "lon": -3.6930,
+      "description": "Fuga de gas detectada cerca de la estacion"
+    },
+    {
+      "id": "MAD-005",
+      "type": "incendio_industrial",
+      "name": "Incendio industrial en Villaverde",
+      "address": "Poligono Villaverde, Madrid",
+      "lat": 40.3500,
+      "lon": -3.6980,
+      "description": "Incendio en nave industrial de Villaverde"
+    }
+  ],
+  "Barcelona": [
+    {
+      "id": "BCN-001",
+      "type": "incendio_vivienda",
+      "name": "Incendio en La Rambla",
+      "address": "La Rambla, Barcelona",
+      "lat": 41.3809,
+      "lon": 2.1740,
+      "description": "Incendio en edificio de La Rambla"
+    },
+    {
+      "id": "BCN-002",
+      "type": "accidente_trafico",
+      "name": "Choque en Avinguda Diagonal",
+      "address": "Avinguda Diagonal, Barcelona",
+      "lat": 41.3940,
+      "lon": 2.1560,
+      "description": "Accidente de trafico en Diagonal"
+    },
+    {
+      "id": "BCN-003",
+      "type": "rescate_altura",
+      "name": "Rescate en Barceloneta",
+      "address": "Playa de la Barceloneta, Barcelona",
+      "lat": 41.3780,
+      "lon": 2.1890,
+      "description": "Rescate en zona de playa"
+    },
+    {
+      "id": "BCN-004",
+      "type": "incendio_industrial",
+      "name": "Incendio en Zona Franca",
+      "address": "Zona Franca, Barcelona",
+      "lat": 41.3520,
+      "lon": 2.1335,
+      "description": "Incendio en zona industrial del puerto"
+    },
+    {
+      "id": "BCN-005",
+      "type": "fuga_quimica",
+      "name": "Fuga quimica en Poblenou",
+      "address": "Poblenou, Barcelona",
+      "lat": 41.3945,
+      "lon": 2.1985,
+      "description": "Escape de sustancia quimica en zona 22@"
+    }
+  ],
+  "Sevilla": [
+    {
+      "id": "SEV-001",
+      "type": "incendio_vivienda",
+      "name": "Incendio en Triana",
+      "address": "Calle Betis, Triana, Sevilla",
+      "lat": 37.3830,
+      "lon": -6.0050,
+      "description": "Incendio en vivienda del barrio de Triana"
+    },
+    {
+      "id": "SEV-002",
+      "type": "accidente_trafico",
+      "name": "Choque en Ronda del Tamarguillo",
+      "address": "Ronda del Tamarguillo, Sevilla",
+      "lat": 37.3870,
+      "lon": -5.9720,
+      "description": "Accidente de trafico en ronda urbana"
+    },
+    {
+      "id": "SEV-003",
+      "type": "rescate_altura",
+      "name": "Rescate en Parque Maria Luisa",
+      "address": "Parque de Maria Luisa, Sevilla",
+      "lat": 37.3771,
+      "lon": -5.9870,
+      "description": "Rescate en zona del parque"
+    },
+    {
+      "id": "SEV-004",
+      "type": "incendio_forestal",
+      "name": "Incendio en Alamillo",
+      "address": "Parque del Alamillo, Sevilla",
+      "lat": 37.4100,
+      "lon": -5.9950,
+      "description": "Incendio de vegetacion en parque periurbano"
+    }
+  ],
+  "Bilbao": [
+    {
+      "id": "BIL-001",
+      "type": "incendio_vivienda",
+      "name": "Incendio en Casco Viejo",
+      "address": "Casco Viejo, Bilbao",
+      "lat": 43.2590,
+      "lon": -2.9240,
+      "description": "Incendio en edificio del Casco Viejo"
+    },
+    {
+      "id": "BIL-002",
+      "type": "accidente_trafico",
+      "name": "Choque en Gran Via",
+      "address": "Gran Via Don Diego Lopez de Haro, Bilbao",
+      "lat": 43.2640,
+      "lon": -2.9350,
+      "description": "Accidente de trafico en Gran Via"
+    },
+    {
+      "id": "BIL-003",
+      "type": "fuga_quimica",
+      "name": "Fuga en zona portuaria",
+      "address": "Puerto de Bilbao",
+      "lat": 43.2550,
+      "lon": -2.9180,
+      "description": "Fuga de sustancia quimica en zona portuaria"
+    },
+    {
+      "id": "BIL-004",
+      "type": "rescate_altura",
+      "name": "Rescate en Artxanda",
+      "address": "Monte Artxanda, Bilbao",
+      "lat": 43.2780,
+      "lon": -2.9380,
+      "description": "Rescate en zona de montana urbana"
+    }
+  ]
+}

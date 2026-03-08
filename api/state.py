@@ -29,6 +29,7 @@ class SharedState:
         self.state_history: deque[dict] = deque(maxlen=500)
         self.active_alerts: list[dict] = []
         self.active_routes: dict[str, dict] = {}  # vehicle_id → route data
+        self.active_emergency: dict | None = None
         self.chat_messages: deque[dict] = deque(maxlen=200)
         self.mission_events: list[dict] = []
         self._last_mission_status: str = ""
@@ -78,8 +79,21 @@ class SharedState:
                     msg_type = payload.get("type", "")
                     if msg_type == "route_started":
                         self.active_routes[vid] = payload
+                        # Extraer emergencia activa
+                        etype = payload.get("emergency_type")
+                        dest_name = payload.get("destination")
+                        coords = payload.get("coords", [])
+                        dest_coords = coords[-1] if coords else None
+                        self.active_emergency = {
+                            "emergency_type": etype,
+                            "destination": dest_name,
+                            "destination_coords": dest_coords,
+                            "total_distance_m": payload.get("total_distance_m", 0),
+                            "eta_seconds": payload.get("eta_seconds", 0),
+                        }
                     elif msg_type == "route_completed":
                         self.active_routes.pop(vid, None)
+                        self.active_emergency = None
                 elif TOPIC_CHAT in msg.topic:
                     self.chat_messages.append(payload)
                 elif TOPIC_ALERTS in msg.topic:
@@ -111,6 +125,10 @@ class SharedState:
     def get_route(self, vehicle_id: str) -> dict | None:
         with self._lock:
             return self.active_routes.get(vehicle_id)
+
+    def get_active_emergency(self) -> dict | None:
+        with self._lock:
+            return dict(self.active_emergency) if self.active_emergency else None
 
     def get_alerts(self) -> list[dict]:
         with self._lock:
